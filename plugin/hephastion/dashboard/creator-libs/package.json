@@ -2,7 +2,7 @@
   "name": "creator-libs",
   "private": true,
   "version": "0.0.0",
-  "description": "Build harness that vendors esbuild-wasm (and later, the Creator plugin's browser-side JS library set) for the Hermes Workspace dashboard's Creator module.",
+  "description": "Build harness that vendors esbuild-wasm (and later, the Creator plugin's browser-side JS library set) for the Hephastion dashboard's Creator module.",
   "type": "module",
   "engines": {
     "node": ">=22"

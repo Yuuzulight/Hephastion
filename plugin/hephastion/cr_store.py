@@ -89,9 +89,9 @@ def _hermes_home() -> Path:
 def _creator_dir() -> Path:
     try:
         from plugins.plugin_storage import plugin_data_dir
-        base = Path(plugin_data_dir("hermes-workspace"))
+        base = Path(plugin_data_dir("hephastion"))
     except Exception:
-        base = _hermes_home() / "plugin-data" / "hermes-workspace"
+        base = _hermes_home() / "plugin-data" / "hephastion"
     d = base / "creator"
     d.mkdir(parents=True, exist_ok=True)
     return d

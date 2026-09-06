@@ -1,6 +1,6 @@
 /**
- * Knowledge — the renderer half of the Hermes Workspace plugin. A right-side
- * pane over the backend at /api/plugins/hermes-workspace: search, browse, read.
+ * Knowledge — the renderer half of the Hephastion plugin. A right-side
+ * pane over the backend at /api/plugins/hephastion: search, browse, read.
  *
  * Single file by contract: imports resolve only for '@hermes/plugin-sdk',
  * 'react', and 'react/jsx-runtime'. Tasks 14-15 extend register(ctx) with the
@@ -27,7 +27,7 @@ import {
 import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
-const PLUGIN_ID = 'hermes-workspace'
+const PLUGIN_ID = 'hephastion'
 
 /** Set in register(); helpers reach the scoped context through it. */
 let CTX = null
@@ -1111,7 +1111,7 @@ function ApprovalPane() {
 // own `crCtx` binding, its own `cr`-prefixed atoms, all state module-scoped.
 // Spec §5.11 (pane content + per-type preview) and §3.6 (inner error boundary,
 // iframe theme prelude). Backend lives under
-// /api/plugins/hermes-workspace/creator/ (spec §5.10).
+// /api/plugins/hephastion/creator/ (spec §5.10).
 
 let crCtx = null
 const crApi = (p, o) => crCtx.rest(p, o)
@@ -2734,17 +2734,17 @@ function crRegister(ctx) {
       id: 'cr-palette-open',
       area: PALETTE_AREA,
       data: {
-        id: 'hermes-workspace.open-creator',
+        id: 'hephastion.open-creator',
         label: 'Open Creator',
         keywords: ['creator', 'artifact', 'preview', 'code'],
-        run: () => host.panes?.reveal?.('hermes-workspace.cr-pane'),
+        run: () => host.panes?.reveal?.('hephastion.cr-pane'),
       },
     },
     {
       id: 'cr-palette-scan',
       area: PALETTE_AREA,
       data: {
-        id: 'hermes-workspace.creator-rescan',
+        id: 'hephastion.creator-rescan',
         label: 'Creator: rescan this chat',
         keywords: ['creator', 'scan', 'artifact', 'rescan'],
         run: () =>
@@ -2815,7 +2815,7 @@ export default {
         id: 'palette-toggle',
         area: PALETTE_AREA,
         data: {
-          id: 'hermes-workspace.toggle-vault-context',
+          id: 'hephastion.toggle-vault-context',
           label: 'Toggle vault context',
           keywords: ['vault', 'context', 'knowledge', 'obsidian', 'composer'],
           detail: () => (vaultOn$.get() ? 'on' : 'off'),
@@ -2831,7 +2831,7 @@ export default {
       id: 'palette-reindex',
       area: PALETTE_AREA,
       data: {
-        id: 'hermes-workspace.reindex-vault',
+        id: 'hephastion.reindex-vault',
         label: 'Reindex vault',
         keywords: ['reindex', 'vault', 'knowledge', 'rebuild', 'index', 'obsidian'],
         run: () =>
@@ -2858,7 +2858,7 @@ export default {
           id: 'palette-extract',
           area: PALETTE_AREA,
           data: {
-            id: 'hermes-workspace.extract-memories',
+            id: 'hephastion.extract-memories',
             label: 'Extract memories from this chat',
             keywords: ['memory', 'memories', 'extract', 'knowledge', 'vault', 'save', 'remember'],
             run: runExtraction,
@@ -2868,7 +2868,7 @@ export default {
           id: 'palette-undo-extract',
           area: PALETTE_AREA,
           data: {
-            id: 'hermes-workspace.undo-memory-extraction',
+            id: 'hephastion.undo-memory-extraction',
             label: 'Undo last memory extraction',
             keywords: ['memory', 'undo', 'revert', 'knowledge', 'vault'],
             run: () =>

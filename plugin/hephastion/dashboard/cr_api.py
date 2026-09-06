@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 # cr_store is loaded by explicit path — it lives one dir up, not on sys.path.
 _p = Path(__file__).resolve().parent.parent / "cr_store.py"
-_s = importlib.util.spec_from_file_location("hw_cr_store", _p)
+_s = importlib.util.spec_from_file_location("hephastion_cr_store", _p)
 cr_store = importlib.util.module_from_spec(_s)
 _s.loader.exec_module(cr_store)  # safe: _selfcheck() is under __main__
 

@@ -22,7 +22,7 @@ def _hermes_home() -> pathlib.Path:
 
 
 def data_dir() -> pathlib.Path:
-    d = _hermes_home() / "plugins" / "hermes-workspace" / "data"
+    d = _hermes_home() / "plugins" / "hephastion" / "data"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

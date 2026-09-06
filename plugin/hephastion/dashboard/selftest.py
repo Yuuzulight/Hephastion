@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-MODULES = ["hw_store", "hw_notes", "hw_index", "hw_context", "hw_merge", "hw_extract"]  # grows each task
+MODULES = ["hephastion_store", "hephastion_notes", "hephastion_index", "hephastion_context", "hephastion_merge", "hephastion_extract"]  # grows each task
 
 
 def run_module_checks() -> None:
@@ -29,24 +29,24 @@ def _client():
 
 def _selfcheck_http_read() -> None:
     import tempfile
-    import hw_store
-    import hw_index
+    import hephastion_store
+    import hephastion_index
 
     saved_home = os.environ.get("HERMES_HOME")
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             os.environ["HERMES_HOME"] = os.path.join(d, "home")
-            hw_store._cache = None
+            hephastion_store._cache = None
             vault = os.path.join(d, "vault")
             os.makedirs(os.path.join(vault, "Areas"))
             open(os.path.join(vault, "Areas", "Argos.md"), "w", encoding="utf-8").write(
                 "# Argos\n\nwidget engine\n\n## History\n\n- **2026-08-20** — merged.\n")
 
-            hw_index.reset_for_tests()
+            hephastion_index.reset_for_tests()
             c = _client()
             # no vault configured yet: /status must not construct an Index
             assert c.get("/status").status_code == 200
-            assert hw_index._INDEX is None
+            assert hephastion_index._INDEX is None
 
             assert c.post("/config", json={"vault": vault}).json()["vault_exists"]
             c.post("/reindex", json={"full": True})
@@ -58,8 +58,8 @@ def _selfcheck_http_read() -> None:
             assert c.get("/tree", params={"path": "../x"}).status_code == 400
             assert c.get("/note", params={"path": "Areas/Nope.md"}).status_code == 404
     finally:
-        hw_index.reset_for_tests()
-        hw_store._cache = None
+        hephastion_index.reset_for_tests()
+        hephastion_store._cache = None
         if saved_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:
@@ -69,14 +69,14 @@ def _selfcheck_http_read() -> None:
 
 def _selfcheck_http_write() -> None:
     import tempfile
-    import hw_store
-    import hw_index
+    import hephastion_store
+    import hephastion_index
 
     saved_home = os.environ.get("HERMES_HOME")
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             os.environ["HERMES_HOME"] = os.path.join(d, "home")
-            hw_store._cache = None
+            hephastion_store._cache = None
             vault = os.path.join(d, "vault")
             os.makedirs(os.path.join(vault, "Areas"))
             argos = os.path.join(vault, "Areas", "Argos.md")
@@ -84,7 +84,7 @@ def _selfcheck_http_write() -> None:
                 "# Argos\n\nwidget engine\n\n## History\n\n- **2026-08-20** — merged.\n")
             original = open(argos, "rb").read()
 
-            hw_index.reset_for_tests()
+            hephastion_index.reset_for_tests()
             c = _client()
             assert c.post("/config", json={"vault": vault}).json()["vault_exists"]
             c.post("/reindex", json={"full": True})
@@ -117,8 +117,8 @@ def _selfcheck_http_write() -> None:
             assert undo[0]["result"] in ("restored", "removed"), undo
             assert open(argos, "rb").read() == original  # fully reversible
     finally:
-        hw_index.reset_for_tests()
-        hw_store._cache = None
+        hephastion_index.reset_for_tests()
+        hephastion_store._cache = None
         if saved_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:
@@ -128,14 +128,14 @@ def _selfcheck_http_write() -> None:
 
 def _selfcheck_http_write_edges() -> None:
     import tempfile
-    import hw_store
-    import hw_index
+    import hephastion_store
+    import hephastion_index
 
     saved_home = os.environ.get("HERMES_HOME")
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             os.environ["HERMES_HOME"] = os.path.join(d, "home")
-            hw_store._cache = None
+            hephastion_store._cache = None
             vault = os.path.join(d, "vault")
             os.makedirs(os.path.join(vault, "Areas"))
             a = os.path.join(vault, "Areas", "A.md")
@@ -143,7 +143,7 @@ def _selfcheck_http_write_edges() -> None:
             open(a, "w", encoding="utf-8").write("# A\n\n## History\n\n- **2026-08-01** — one.\n")
             open(b, "w", encoding="utf-8").write("# B\n\n## History\n\n- **2026-08-01** — one.\n")
 
-            hw_index.reset_for_tests()
+            hephastion_index.reset_for_tests()
             c = _client()
             c.post("/config", json={"vault": vault})
             c.post("/reindex", json={"full": True})
@@ -176,8 +176,8 @@ def _selfcheck_http_write_edges() -> None:
 
             # the pending journal entry was rewritten with the real post-write
             # facts, and the conflicted item left no trace
-            import hw_merge
-            jitems = hw_merge._read_journal()[-1]["items"]
+            import hephastion_merge
+            jitems = hephastion_merge._read_journal()[-1]["items"]
             assert len(jitems) == 2, jitems
             assert all(it["sha_after"] and it["bak"] for it in jitems), jitems
             assert all(it["path"] == "Areas/A.md" for it in jitems), jitems
@@ -217,14 +217,14 @@ def _selfcheck_http_write_edges() -> None:
 
             # a dedup blowup on one item (a locked note -> PermissionError) must
             # not sink the batch: the item errors, the rest still commit.
-            real_dedup = hw_merge.dedup_entry
+            real_dedup = hephastion_merge.dedup_entry
 
             def _boom(line, *a, **k):
                 if "boom" in line:
                     raise PermissionError("note is locked")
                 return real_dedup(line, *a, **k)
 
-            hw_merge.dedup_entry = _boom
+            hephastion_merge.dedup_entry = _boom
             try:
                 out = c.post("/memories/commit", json={"items": [
                     {"target_path": "Areas/A.md", "history_line": "boom item.",
@@ -240,10 +240,10 @@ def _selfcheck_http_write_edges() -> None:
                      "candidate_index": 32}]})
                 assert pvr.status_code == 500, pvr.status_code
             finally:
-                hw_merge.dedup_entry = real_dedup
+                hephastion_merge.dedup_entry = real_dedup
     finally:
-        hw_index.reset_for_tests()
-        hw_store._cache = None
+        hephastion_index.reset_for_tests()
+        hephastion_store._cache = None
         if saved_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:
@@ -368,7 +368,7 @@ def _selfcheck_creator_http() -> None:
                 except HTTPException as e:
                     assert e.status_code == 400, (bad, e.status_code)
             assert c.get("/creator/asset/nope.js").status_code == 404
-            # defensive mount: a broken cr_api import must not unmount hw_* routes
+            # defensive mount: a broken cr_api import must not unmount hephastion_* routes
             import plugin_api, importlib
             assert any(r.path == "/status" for r in plugin_api.router.routes)
     finally:
@@ -529,7 +529,7 @@ def _selfcheck_creator_publish() -> None:
 
 
 def _selfcheck_creator_defensive_mount() -> None:
-    """A throw from `import cr_api` must leave every hw_* route mounted and log a warning."""
+    """A throw from `import cr_api` must leave every hephastion_* route mounted and log a warning."""
     import builtins
     import importlib
     import logging
@@ -558,7 +558,7 @@ def _selfcheck_creator_defensive_mount() -> None:
         builtins.__import__ = _no_cr_api
         importlib.reload(plugin_api)
         broken = _paths(plugin_api)
-        assert "/status" in broken, "hw_* routes lost when cr_api import failed"
+        assert "/status" in broken, "hephastion_* routes lost when cr_api import failed"
         assert not any(p.startswith("/creator") for p in broken), broken
         assert any("creator API not mounted" in rec.getMessage()
                    for rec in records), [rec.getMessage() for rec in records]

@@ -1,4 +1,4 @@
-# Hermes Workspace
+# Hephastion
 
 Your Obsidian vault as long-term memory and durable output for Hermes Desktop.
 No AI provider owns your memory — the vault does. Works the same whichever
@@ -37,14 +37,31 @@ from the component surface in a console pane. Bundles and Tailwind output are
 cached by content hash, so re-stepping to an already-rendered version is
 instant.
 
-`creator-libs/` (`plugin/hermes-workspace/dashboard/creator-libs/`) vendors
+`creator-libs/` (`plugin/hephastion/dashboard/creator-libs/`) vendors
 what the React runtime needs — esbuild-wasm plus 20 npm libraries and a
 Tailwind build, ~19 MB committed to the repo (not gitignored; only
 `creator-libs/node_modules/` is). It's rebuilt with
-`node plugin/hermes-workspace/dashboard/creator-libs/build.mjs` and checked
-with `node plugin/hermes-workspace/dashboard/creator-libs/verify.mjs` — see
-Development below. Still Phase 2: CodeMirror editing, standalone export, and
-Gist publish land in Phase 3.
+`node plugin/hephastion/dashboard/creator-libs/build.mjs` and checked
+with `node plugin/hephastion/dashboard/creator-libs/verify.mjs` — see
+Development below.
+
+**Editor** — the pane edits artifacts with a real CodeMirror 6 (syntax
+highlighting per type/language, search, bracket matching). If the vendored
+CodeMirror asset fails to load, editing falls back to the plain Phase 1
+`Textarea` instead of breaking.
+
+**Export** — the "Export" button writes the current artifact out as a
+standalone, portable `.html` file (`react` artifacts get their bundle +
+compiled Tailwind CSS inlined, no compiler or preview-bridge code in the
+output). The exported file works fully offline — open it directly in any
+browser, no server involved.
+
+**Publish** — the "Publish" button posts the same standalone HTML to a
+public GitHub Gist via the `gh` CLI and returns a shareable URL; a raw-render
+link is also returned for every published type. `gh` is **optional**: if it isn't
+installed and authenticated, Publish doesn't fail silently — it shows a
+notice explaining how to enable it (`install gh and run gh auth login, or
+set a token in Creator settings`).
 
 ## Requirements
 
@@ -55,17 +72,17 @@ Gist publish land in Phase 3.
 
 ## Install
 
-1. Copy `plugin/hermes-workspace/` into `~/.hermes/plugins/hermes-workspace/`
-   (`%LOCALAPPDATA%\hermes\plugins\hermes-workspace\` on Windows). The folder
+1. Copy `plugin/hephastion/` into `~/.hermes/plugins/hephastion/`
+   (`%LOCALAPPDATA%\hermes\plugins\hephastion\` on Windows). The folder
    is ~20 MB thanks to `creator-libs/`'s vendored esbuild + npm libraries —
    ships as part of the copy, no separate install step.
-2. Run `hermes plugins enable hermes-workspace`. This adds the plugin to
+2. Run `hermes plugins enable hephastion`. This adds the plugin to
    `plugins.enabled` in `~/.hermes/config.yaml` and enables the agent +
    dashboard halves of **both** Knowledge and Creator:
    ```yaml
    plugins:
      enabled:
-       - hermes-workspace
+       - hephastion
    ```
 3. Restart Hermes Desktop. The renderer half (both panes) auto-loads on
    discovery — no Settings toggle needed to turn it on. It can be *disabled*
@@ -78,7 +95,7 @@ Gist publish land in Phase 3.
 5. Optional:
    - Knowledge: drop an `agent_rules.md` in your vault (or point `rules_file`
      at one) to override the default capture conventions. See
-     `plugin/hermes-workspace/dashboard/default_rules.md` for the defaults.
+     `plugin/hephastion/dashboard/default_rules.md` for the defaults.
    - Creator: `project_root` and `github_token` in the Creator settings
      (`github_token` is only needed for Phase 3's Gist publish).
 
@@ -110,7 +127,7 @@ Every write shows a diff first. A `.bak` of each touched note is kept, and
 ## Development
 
 ```bash
-cd plugin/hermes-workspace/dashboard
+cd plugin/hephastion/dashboard
 python selftest.py
 ```
 
@@ -124,14 +141,14 @@ The renderer half (`desktop/plugin.js`) is a single file with no build step —
 edit and Hermes hot-reloads it. Syntax-check it directly:
 
 ```bash
-node --check plugin/hermes-workspace/desktop/plugin.js
+node --check plugin/hephastion/desktop/plugin.js
 ```
 
 `creator-libs/` is rebuilt and re-verified separately when its pinned
 versions change:
 
 ```bash
-cd plugin/hermes-workspace/dashboard/creator-libs
+cd plugin/hephastion/dashboard/creator-libs
 node build.mjs   # re-vendor esbuild-wasm + the npm libraries
 node verify.mjs  # check every vendored file loads and matches MANIFEST.json
 ```
@@ -167,3 +184,22 @@ Phase 2 (`type=react`), per design-creator.md §9.2:
   keystroke).
 - Stepping the version stepper to an already-seen version is instant — served
   from the bundle/Tailwind cache, not rebuilt.
+
+Phase 3 (CodeMirror editor, export, publish), per design-creator.md §9.2 —
+**not run as part of this change; walk it after any Creator change**:
+
+- The CodeMirror editor loads and highlights correctly for each artifact
+  type/language; forcing the CodeMirror asset load to fail falls back to the
+  Phase 1 `Textarea` instead of breaking editing.
+- Edit + Save still works through the new editor (new version created, dirty
+  dot behaves, ⌘S works, read-only on a non-latest version).
+- Exporting each artifact type produces a valid standalone `.html` file that
+  opens correctly in a real browser with no server running.
+- The `react` export specifically: no console errors on open, and no
+  orphaned bridge/`postMessage` code in the output (it's a real standalone
+  doc, not a leftover preview iframe payload) — and it's styled (the
+  compiled Tailwind CSS is inlined, not missing).
+- Publish, with `gh` installed and authenticated, returns a working Gist URL
+  that opens the published artifact.
+- Publish, without `gh` configured, shows the "how to enable" notice instead
+  of failing silently or throwing.

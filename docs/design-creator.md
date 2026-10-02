@@ -7,7 +7,7 @@ Supersedes: `design-creator-sp1.md`
 ## 1. Purpose
 
 A Claude-Artifacts equivalent, shipped as a second module (**Creator**) inside the
-existing `hermes-workspace` plugin alongside **Knowledge**. The model creates
+existing `hephastion` plugin alongside **Knowledge**. The model creates
 durable, versioned artifacts through explicit tools; a docked pane previews,
 edits, versions, and (Phase 2) runs them; Phase 3 adds a real editor and
 export/publish; Phase 4 gives artifacts a `window.hermes` runtime.
@@ -51,20 +51,20 @@ Every claim below was checked against the real tree at
 
 ### 3.1 Plugin loading and gating
 
-- `hermes-workspace` is a **user directory plugin**. Its **agent + dashboard**
+- `hephastion` is a **user directory plugin**. Its **agent + dashboard**
   halves are gated by `plugins.enabled` in `~/.hermes/config.yaml`
   (`hermes_cli/plugins.py:4464-4478`, `web_server.py:19185-19197`).
 - The **desktop renderer** half is **not** gated by `config.yaml`. The runtime
   loader activates a discovered plugin when `pluginActive(id, defaultEnabled ??
   true)` — an *undecided* plugin runs by default (`contrib/runtime-loader.ts:190`,
   `contrib/plugins-store.ts:32` records only *explicit* user choices). So once
-  `~/.hermes/plugins/hermes-workspace/` exists and Hermes restarts, `plugin.js`
+  `~/.hermes/plugins/hephastion/` exists and Hermes restarts, `plugin.js`
   loads with **no toggle**; the user can *disable* it in **Settings → Plugins**,
   but nothing needs to be turned on. (The earlier draft's "must also toggle
   Settings→Plugins" was wrong.)
 - A directory plugin needs `plugin.yaml` **and** a root `__init__.py` exporting
   `def register(ctx)` (`plugins.py:5461-5463`; missing → `Failed to load plugin
-  hermes-workspace: No __init__.py`). `hermes-workspace` has none today, so its
+  hephastion: No __init__.py`). `hephastion` has none today, so its
   agent side currently fails harmlessly. Adding it makes the agent half load;
   desktop and dashboard discovery are unaffected.
 - `plugin.yaml` declares **`kind: standalone`**. `_detect_kind_from_source` is
@@ -114,17 +114,17 @@ the persisted prompt (cache-safe); duplicate `id` raises
 (`0 < max_chars <= 4000`) — zero headroom. The 8000-char / 32-section aggregate
 is shared across **all** plugin sections process-wide (fine now — Knowledge
 registers none). The host frames the section as `## Plugin Context:
-hermes-workspace`, so the content must **not** start with its own `##` heading.
+hephastion`, so the content must **not** start with its own `##` heading.
 
 ### 3.4 Store: processes and SQLite
 
 - Agent process and dashboard web server are separate siblings; no localhost HTTP
   path between them; they coordinate through the filesystem under `~/.hermes/`.
-- Data dir: `plugin_storage.plugin_data_dir("hermes-workspace")` →
-  `<HERMES_HOME>/plugin-data/hermes-workspace/`, profile-aware, resolved through
+- Data dir: `plugin_storage.plugin_data_dir("hephastion")` →
+  `<HERMES_HOME>/plugin-data/hephastion/`, profile-aware, resolved through
   `get_hermes_home()` **every call** (never cache a `Path`). **Not** the install
-  dir `<HERMES_HOME>/plugins/hermes-workspace/data/` (which `hermes plugins
-  update` clobbers — `hw_store.py` uses that; Creator must not).
+  dir `<HERMES_HOME>/plugins/hephastion/data/` (which `hermes plugins
+  update` clobbers — `hephastion_store.py` uses that; Creator must not).
 - **Creator does not use `plugin_storage.plugin_db()`.** That helper rejects any
   filename containing a slash (`Path(filename).name != filename`,
   `plugin_storage.py:74`) and places the DB directly in `plugin_data_dir(name)`,
@@ -149,7 +149,7 @@ hermes-workspace`, so the content must **not** start with its own `##` heading.
 - `_mount_plugin_api_routes` execs `dashboard/plugin_api.py` as a bare top-level
   module (no `submodule_search_locations`) inside **one** `try/except`
   (`web_server.py:19232-19257`). **Any** import-time exception in a pulled-in file
-  unmounts **all** of `hermes-workspace`'s routes. So `plugin_api.py` gains
+  unmounts **all** of `hephastion`'s routes. So `plugin_api.py` gains
   `import logging` and:
   ```python
   try:
@@ -169,7 +169,7 @@ hermes-workspace`, so the content must **not** start with its own `##` heading.
   import cr_store` on the agent side, so it must be import-safe **both** ways: no
   relative imports, no top-level `hermes_*`.
 - `cr_api.router = APIRouter(prefix="/creator")` — **every** Creator route lives
-  under `/api/plugins/hermes-workspace/creator/…` so it can never shadow a future
+  under `/api/plugins/hephastion/creator/…` so it can never shadow a future
   Knowledge route (`/status`, `/config`, `/search`, `/note`, `/tree`,
   `/reindex`, `/memories/*`).
 
@@ -258,7 +258,7 @@ messages.
 
 ## 4. File layout
 
-Added to `plugin/hermes-workspace/`:
+Added to `plugin/hephastion/`:
 
 ```
 plugin.yaml            + kind: standalone
@@ -294,7 +294,7 @@ dashboard/selftest.py  + explicit-path cr_store load in the check list + a Creat
 ### 5.1 Store on disk
 
 ```
-<HERMES_HOME>/plugin-data/hermes-workspace/creator/
+<HERMES_HOME>/plugin-data/hephastion/creator/
 ├── creator-index.db      # sqlite3.connect(...) directly (not plugin_db); authoritative
 └── <dir>/
     ├── v1.<ext>
@@ -496,7 +496,7 @@ the pane calls scan when it opens for a session and on
 `host.state.$focusedBusy` true→false. Cannot recover a current-live-turn
 artifact (SessionDB lags).
 
-### 5.10 HTTP API — all under `/api/plugins/hermes-workspace/creator/`
+### 5.10 HTTP API — all under `/api/plugins/hephastion/creator/`
 
 ```
 GET  /artifacts?session_id=          -> {artifacts:[{identifier,type,title,version,updated_at,origin,in_session}]}
@@ -782,7 +782,7 @@ reachable. Returns via the JSON envelope (3.6).
    `readFile("data.csv")` resolves here first.
 2. **The vault** — `readFile("vault:Areas/Argos.md")`, `readdir("vault:Areas")`.
    `cr_api` reuses Knowledge's path-guard + note-read code by **explicit-path
-   import** of the relevant `hw_*` module (`spec_from_file_location`, the same
+   import** of the relevant `hephastion_*` module (`spec_from_file_location`, the same
    trick as loading `cr_store`) — **in-process, not an HTTP call to Knowledge's
    routes** — so Creator doesn't couple to Knowledge's route shapes. Requires a
    vault configured in Knowledge; else the scheme rejects.
@@ -854,7 +854,7 @@ Phase 1 unit targets:
     (`github_token_set:true`).
 15. Path guard: `GET /creator/artifacts/..%2f..%2fpasswd/v/1` → 400.
 16. Defensive mount: monkeypatch `cr_api` import to raise → `import plugin_api`
-    still succeeds, `hw_*` routes still mount, `selftest.py` still green.
+    still succeeds, `hephastion_*` routes still mount, `selftest.py` still green.
 
 Phase 2:
 
@@ -949,8 +949,8 @@ the next.
 
 ## 12. Install
 
-1. Copy `plugin/hermes-workspace/` → `~/.hermes/plugins/hermes-workspace/`.
-2. `hermes plugins enable hermes-workspace` — adds `plugins.enabled`
+1. Copy `plugin/hephastion/` → `~/.hermes/plugins/hephastion/`.
+2. `hermes plugins enable hephastion` — adds `plugins.enabled`
    (currently absent from `config.yaml`); enables the **agent + dashboard**
    halves of **both** Knowledge and Creator.
 3. Restart Hermes Desktop. The renderer half auto-loads on discovery — no

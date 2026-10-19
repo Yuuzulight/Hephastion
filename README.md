@@ -6,6 +6,8 @@ model you have active.
 
 Two modules ship in this plugin:
 
+**Status:** Knowledge is the shipped module. Creator Phases 1–3 (versioned artifacts and agent tools, the React/JSX artifact runtime, and the editor with export and publish) are built; Phase 4, the `window.hermes` runtime for artifacts, is designed (see `docs/design-creator.md`) but not started.
+
 ## Knowledge
 
 - **Read** — a composer toggle. When on, relevant notes from your vault are

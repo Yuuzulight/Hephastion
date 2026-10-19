@@ -30,7 +30,7 @@ bundled `plugins/kanban/`, `plugins/hermes-achievements/` — dashboard/ only).
 ## Agent-side loading
 
 - `__init__.py` loaded as package `hermes_plugins.<slug>` where `slug = key.replace("/","__").replace("-","_")`.
-  Dir `hermes-workspace` → module `hermes_plugins.hermes_workspace`.
+  Dir `hephastion` → module `hermes_plugins.hephastion`.
   `module.__path__` / `__package__` set → **`from . import cr_store` works.**
 - Entry: module-level `def register(ctx): ...`, one positional arg. Call site
   `plugins.py:5282`: `register_fn(PluginContext(manifest, manager))`.

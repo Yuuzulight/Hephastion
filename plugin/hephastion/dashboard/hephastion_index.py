@@ -5,8 +5,8 @@ import sqlite3
 import threading
 import time
 
-import hw_notes
-import hw_store
+import hephastion_notes
+import hephastion_store
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
@@ -45,7 +45,7 @@ def _sha1(b: bytes) -> str:
 
 class Index:
     def __init__(self) -> None:
-        self._db_path = hw_store.data_dir() / "index" / f"{hw_store.vault_hash()}.db"
+        self._db_path = hephastion_store.data_dir() / "index" / f"{hephastion_store.vault_hash()}.db"
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._con = sqlite3.connect(self._db_path, check_same_thread=False)
         self._con.executescript("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
@@ -66,7 +66,7 @@ class Index:
             self._con = sqlite3.connect(self._db_path, check_same_thread=False)
             self._con.executescript("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
             self._con.executescript(_SCHEMA)
-        vp = hw_store.vault_path()
+        vp = hephastion_store.vault_path()
         new_vp = str(vp.resolve()) if vp else ""
         old = self._con.execute("SELECT v FROM meta WHERE k='vault_path'").fetchone()
         if old and old[0] and old[0] != new_vp:  # moved db or stale hash collision
@@ -85,8 +85,8 @@ class Index:
         self._con.commit()
 
     def _walk(self):
-        vp = hw_store.vault_path()
-        max_bytes = hw_store.get_config()["max_file_kb"] * 1024
+        vp = hephastion_store.vault_path()
+        max_bytes = hephastion_store.get_config()["max_file_kb"] * 1024
         for root, dirs, files in os.walk(vp, followlinks=False):
             dirs[:] = [d for d in dirs
                        if not d.startswith(".") and d not in _SKIP_DIRS]
@@ -106,7 +106,7 @@ class Index:
     def _index_one(self, rel: str, full: str, st: os.stat_result, raw: bytes) -> None:
         text = raw.decode("utf-8", errors="replace")
         stem = os.path.splitext(os.path.basename(rel))[0]
-        parsed = hw_notes.parse_note(text, stem)
+        parsed = hephastion_notes.parse_note(text, stem)
         self._con.execute("DELETE FROM notes WHERE path=?", (rel,))
         self._con.execute(
             "INSERT INTO notes(path,title,headings,tags,links,frontmatter,body) "
@@ -123,7 +123,7 @@ class Index:
              int(time.time())))
 
     def sync(self, full: bool = False) -> dict:
-        vp = hw_store.vault_path()
+        vp = hephastion_store.vault_path()
         if not vp or not vp.is_dir():
             return {"indexed": 0, "removed": 0, "took_ms": 0,
                     "error": "vault_not_found"}
@@ -178,7 +178,7 @@ class Index:
                 self.sync()
 
     def search(self, query: str, limit: int) -> list[dict]:
-        vp = hw_store.vault_path()
+        vp = hephastion_store.vault_path()
         if not vp or not vp.is_dir():
             return []
         self._maybe_sync()
@@ -218,7 +218,7 @@ _INDEX: "Index | None" = None
 
 def get_index() -> "Index":
     global _INDEX
-    vh = hw_store.vault_hash()
+    vh = hephastion_store.vault_hash()
     if _INDEX is None or _INDEX._db_path.stem != vh:
         _INDEX = Index()
     return _INDEX
@@ -240,7 +240,7 @@ def _selfcheck() -> None:
         # in the microsecond between reset_for_tests() and rmtree.
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             os.environ["HERMES_HOME"] = os.path.join(d, "home")
-            hw_store._cache = None
+            hephastion_store._cache = None
             vault = os.path.join(d, "vault")
             for sub in ("Areas", "People", "Topics", ".obsidian"):
                 os.makedirs(os.path.join(vault, sub))
@@ -260,7 +260,7 @@ def _selfcheck() -> None:
                  encoding="utf-8").write("# Layout\n\nvault directory layout notes.\n")
             open(os.path.join(vault, "latin1.md"), "wb").write(
                 "# Café\n\nna\xefve bytes.".encode("latin-1"))
-            hw_store.set_vault(vault)
+            hephastion_store.set_vault(vault)
             reset_for_tests()
             idx = get_index()
             idx.sync(full=True)
@@ -283,7 +283,7 @@ def _selfcheck() -> None:
             assert sanitize_fts_query("[[Ada Lovelace]]") == '"Ada" "Lovelace"'
     finally:
         reset_for_tests()  # close the sqlite handle before temp-dir teardown
-        hw_store._cache = None
+        hephastion_store._cache = None
         if saved_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:
@@ -298,14 +298,14 @@ def _selfcheck_incremental() -> None:
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             os.environ["HERMES_HOME"] = os.path.join(d, "home")
-            hw_store._cache = None
+            hephastion_store._cache = None
             vault = os.path.join(d, "vault")
             os.makedirs(os.path.join(vault, "Topics"))
             a = os.path.join(vault, "Topics", "A.md")
             b = os.path.join(vault, "Topics", "B.md")
             open(a, "w", encoding="utf-8").write("# A\n\napple\n")
             open(b, "w", encoding="utf-8").write("# B\n\nbanana\n")
-            hw_store.set_vault(vault)
+            hephastion_store.set_vault(vault)
             reset_for_tests()
             idx = get_index()
             idx.sync(full=True)
@@ -324,8 +324,8 @@ def _selfcheck_incremental() -> None:
 
             idx._index_one = _slow_index_one
             _spy = []
-            _rp = hw_notes.parse_note
-            hw_notes.parse_note = lambda t, s: _spy.append(s) or _rp(t, s)
+            _rp = hephastion_notes.parse_note
+            hephastion_notes.parse_note = lambda t, s: _spy.append(s) or _rp(t, s)
             try:
                 open(a, "w", encoding="utf-8").write("# A\n\navocado\n")
                 os.utime(a, None)
@@ -343,14 +343,14 @@ def _selfcheck_incremental() -> None:
             finally:
                 _gate.set()
                 idx._index_one = _real_index_one
-                hw_notes.parse_note = _rp
+                hephastion_notes.parse_note = _rp
             assert _spy == ["A"], _spy  # the racing _maybe_sync was a no-op
             assert idx.search("avocado", 5)[0]["path"] == "Topics/A.md"
             assert idx.search("banana", 5)[0]["path"] == "Topics/B.md"
 
             calls = []
-            real = hw_notes.parse_note
-            hw_notes.parse_note = lambda t, s: calls.append(s) or real(t, s)
+            real = hephastion_notes.parse_note
+            hephastion_notes.parse_note = lambda t, s: calls.append(s) or real(t, s)
             try:
                 time.sleep(0.01)
                 open(a, "w", encoding="utf-8").write("# A\n\napricot\n")
@@ -361,7 +361,7 @@ def _selfcheck_incremental() -> None:
                 assert idx.search("apricot", 5)[0]["path"] == "Topics/A.md"
                 assert not idx.search("apple", 5)
             finally:
-                hw_notes.parse_note = real
+                hephastion_notes.parse_note = real
 
             os.remove(b)
             idx._last_scan_ns = 0
@@ -402,7 +402,7 @@ def _selfcheck_incremental() -> None:
             assert idx.search("apricot", 5)[0]["path"] == "Topics/A.md"
     finally:
         reset_for_tests()  # close the sqlite handle before temp-dir teardown
-        hw_store._cache = None
+        hephastion_store._cache = None
         if saved_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:

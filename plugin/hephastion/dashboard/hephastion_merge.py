@@ -8,7 +8,7 @@ import re
 import shutil
 import time
 
-import hw_store
+import hephastion_store
 
 _FOLDER_HINT_RE = re.compile(r"^(People|Areas|Topics|Timeline)/", re.I)
 
@@ -126,7 +126,7 @@ def _fence_map(lines: list[str]) -> list[bool]:
 def _frontmatter_end(lines: list[str]) -> int:
     """Index of the first body line past a leading YAML frontmatter block, else 0.
 
-    Same shape hw_notes._split_frontmatter recognises: a BOM-stripped text whose
+    Same shape hephastion_notes._split_frontmatter recognises: a BOM-stripped text whose
     first line is `---` and which has a later line starting with `---`. Nothing
     may be spliced above that closing marker or the frontmatter is destroyed.
     """
@@ -218,14 +218,14 @@ def new_note_body(stem: str, line: str) -> str:
 
 def _selfcheck() -> None:
     import tempfile
-    import hw_store
-    import hw_index
+    import hephastion_store
+    import hephastion_index
 
     saved_home = os.environ.get("HERMES_HOME")
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             os.environ["HERMES_HOME"] = os.path.join(d, "home")
-            hw_store._cache = None
+            hephastion_store._cache = None
             vault = os.path.join(d, "vault")
             for sub in ("Areas", "People", "Topics"):
                 os.makedirs(os.path.join(vault, sub))
@@ -233,9 +233,9 @@ def _selfcheck() -> None:
                  encoding="utf-8").write("# Argos\n")
             open(os.path.join(vault, "People", "Ada Lovelace.md"), "w",
                  encoding="utf-8").write("# Ada Lovelace\n")
-            hw_store.set_vault(vault)
-            hw_index.reset_for_tests()
-            idx = hw_index.get_index()
+            hephastion_store.set_vault(vault)
+            hephastion_index.reset_for_tests()
+            idx = hephastion_index.get_index()
             idx.sync(full=True)
 
             assert resolve_target("Areas/Argos.md", idx)["resolved_from"] == "exact"
@@ -248,8 +248,8 @@ def _selfcheck() -> None:
                          "resolved_from": "miss", "fuzzy_candidate": None}
             assert resolve_target("../../etc/passwd", idx)["target_path"] == "Topics/passwd.md"
     finally:
-        hw_index.reset_for_tests()
-        hw_store._cache = None
+        hephastion_index.reset_for_tests()
+        hephastion_store._cache = None
         if saved_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:
@@ -421,7 +421,7 @@ def atomic_write(abspath: str, new_text: str, pre_sha: str | None) -> dict:
 
 
 def _backup_dir():
-    return hw_store.data_dir() / "backups" / hw_store.vault_hash()
+    return hephastion_store.data_dir() / "backups" / hephastion_store.vault_hash()
 
 
 def backup(abspath: str) -> str:
@@ -432,7 +432,7 @@ def backup(abspath: str) -> str:
     Keeps the last 20 backups per relpath; prunes any .bak whose filename
     stamp is older than 30 days.
     """
-    vp = hw_store.vault_path()
+    vp = hephastion_store.vault_path()
     rel = os.path.relpath(abspath, str(vp)).replace(os.sep, "/")
     name = os.path.basename(rel)
     dest_dir = _backup_dir() / os.path.dirname(rel)
@@ -460,7 +460,7 @@ def backup(abspath: str) -> str:
 
 
 def _journal_path():
-    d = hw_store.vault_path() / ".hermes"
+    d = hephastion_store.vault_path() / ".hermes"
     d.mkdir(parents=True, exist_ok=True)
     return d / "journal.json"
 
@@ -486,7 +486,7 @@ def _write_journal(log: list[dict]) -> None:
 def journal_append(batch_id: str, items: list[dict]) -> None:
     log = _read_journal()
     log.append({"ts": time.time(), "batch_id": batch_id,
-                "vault": str(hw_store.vault_path()), "items": items})
+                "vault": str(hephastion_store.vault_path()), "items": items})
     _write_journal(log[-500:])
 
 
@@ -530,7 +530,7 @@ def undo(batch_id: str | None) -> list[dict]:
     if batch is None:
         return []
 
-    vp = hw_store.vault_path()
+    vp = hephastion_store.vault_path()
     restored: set[str] = set()  # paths already reverted whole from a .bak
     results: list[dict] = []
     # last-written first: two items on one note unwind in the order they were
@@ -605,10 +605,10 @@ def _selfcheck_write() -> None:
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             os.environ["HERMES_HOME"] = os.path.join(d, "home")
-            hw_store._cache = None
+            hephastion_store._cache = None
             vault = os.path.join(d, "vault")
             os.makedirs(os.path.join(vault, "Areas"))
-            hw_store.set_vault(vault)
+            hephastion_store.set_vault(vault)
 
             p = os.path.join(vault, "Areas", "X.md")
             open(p, "wb").write(
@@ -617,7 +617,7 @@ def _selfcheck_write() -> None:
             pre = sha256(pathlib.Path(p).read_text("utf-8").encode("utf-8"))
 
             backup(p)
-            bak_dir = hw_store.data_dir() / "backups" / hw_store.vault_hash() / "Areas"
+            bak_dir = hephastion_store.data_dir() / "backups" / hephastion_store.vault_hash() / "Areas"
             assert list(bak_dir.glob("X.md.*.bak")), "backup .bak missing"
 
             # a note last touched >30 days ago must still get a durable backup
@@ -772,7 +772,7 @@ def _selfcheck_write() -> None:
             mraw = open(mx, "rb").read()
             assert mraw.count(b"\r\n") == 0 and mraw.count(b"\n") == 11, mraw
     finally:
-        hw_store._cache = None
+        hephastion_store._cache = None
         if saved_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:
@@ -817,23 +817,23 @@ def dedup_entry(line, target_text, session_id, candidate_index, index, is_timeli
 
 def _selfcheck_dedup() -> None:
     import tempfile
-    import hw_store
-    import hw_index
+    import hephastion_store
+    import hephastion_index
 
     saved_home = os.environ.get("HERMES_HOME")
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             os.environ["HERMES_HOME"] = os.path.join(d, "home")
-            hw_store._cache = None
+            hephastion_store._cache = None
             vault = os.path.join(d, "vault")
             os.makedirs(os.path.join(vault, "Areas"))
             open(os.path.join(vault, "Areas", "X.md"), "w",
                  encoding="utf-8").write("# X\nprose\n")
             open(os.path.join(vault, "Areas", "A.md"), "w", encoding="utf-8").write(
                 "# A\n\n## History\n\n- **2026-08-15** — The user deployed Argos to staging.\n")
-            hw_store.set_vault(vault)
-            hw_index.reset_for_tests()
-            idx = hw_index.get_index()
+            hephastion_store.set_vault(vault)
+            hephastion_index.reset_for_tests()
+            idx = hephastion_index.get_index()
             idx.sync(full=True)
 
             target = "## History\n\n- **2026-08-01** — the user prefers tabs over spaces.\n"
@@ -869,8 +869,8 @@ def _selfcheck_dedup() -> None:
             # a different index the journal has NOT seen still evaluates normally
             assert dedup_entry("anything new", target, "s9", 3, idx)["reason"] == "new"
     finally:
-        hw_index.reset_for_tests()
-        hw_store._cache = None
+        hephastion_index.reset_for_tests()
+        hephastion_store._cache = None
         if saved_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:

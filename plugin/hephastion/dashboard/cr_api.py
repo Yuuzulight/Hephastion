@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 # cr_store is loaded by explicit path — it lives one dir up, not on sys.path.
 _p = Path(__file__).resolve().parent.parent / "cr_store.py"
-_s = importlib.util.spec_from_file_location("hw_cr_store", _p)
+_s = importlib.util.spec_from_file_location("hephastion_cr_store", _p)
 cr_store = importlib.util.module_from_spec(_s)
 _s.loader.exec_module(cr_store)  # safe: _selfcheck() is under __main__
 
@@ -43,6 +43,19 @@ class ScanBody(BaseModel):
 class ConfigBody(BaseModel):
     project_root: str | None = None
     github_token: str | None = None
+
+
+class ExportBody(BaseModel):
+    dest: str | None = None
+
+
+class ExportBundleBody(BaseModel):
+    html: str
+    dest: str | None = None
+
+
+class PublishBody(BaseModel):
+    html: str | None = None
 
 
 def _guard(fn):
@@ -116,6 +129,28 @@ def read_config():
 @_guard
 def write_config(body: ConfigBody):
     return cr_store.set_config(body.model_dump(exclude_unset=True))
+
+
+@router.post("/artifacts/{id}/export")
+@_guard
+def export_artifact(id: str, body: ExportBody = ExportBody()):
+    return {"path": cr_store.export_artifact(id, body.dest)}
+
+
+@router.post("/artifacts/{id}/export/bundle")
+@_guard
+def export_bundle(id: str, body: ExportBundleBody):
+    return {"path": cr_store.write_export_bundle(id, body.html, body.dest)}
+
+
+@router.post("/artifacts/{id}/publish")
+@_guard
+def publish_artifact(id: str, body: PublishBody = PublishBody()):
+    # publish_artifact returns {"error": ...} for expected/recoverable cases
+    # (needs_pane, github_not_configured, gist_create_failed) rather than
+    # raising — same 200-with-error-body shape the rest of this route relays
+    # verbatim; only StoreNotFound (unknown id) reaches _guard as a 404.
+    return cr_store.publish_artifact(id, body.html)
 
 
 @router.get("/asset/{name}")

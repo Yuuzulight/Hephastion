@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the Hermes Workspace **Creator** module — a Claude-Artifacts equivalent, added alongside the shipped Knowledge module inside the same `hermes-workspace` plugin: agent tools that create durable versioned artifacts, a docked pane that previews/edits/versions them, a React runtime, standalone export + Gist publish, and a `window.hermes` in-artifact runtime.
+**Goal:** Ship the Hephastion **Creator** module — a Claude-Artifacts equivalent, added alongside the shipped Knowledge module inside the same `hephastion` plugin: agent tools that create durable versioned artifacts, a docked pane that previews/edits/versions them, a React runtime, standalone export + Gist publish, and a `window.hermes` in-artifact runtime.
 
-**Architecture:** Backend (Python) is the source of truth. `cr_store.py` (plugin root, stdlib only) owns all behaviour — a SQLite index it opens directly (not via `plugin_db`) plus per-version content files under `<plugin-data>/hermes-workspace/creator/`. `cr_tools.py` (plugin root) registers 3 agent tools + a system-prompt section. `dashboard/cr_api.py` exposes the same behaviour over HTTP under `/api/plugins/hermes-workspace/creator/`. The renderer half is a new `// ===== CREATOR =====` block in the existing single-file `desktop/plugin.js`, reached from Knowledge's `register(ctx)` by one guarded `crRegister(ctx)` call. Phase 2+ vendors libraries in `dashboard/creator-libs/` (a committed, pinned build) and ships them to the renderer as JSON envelopes because `ctx.rest` is JSON-only.
+**Architecture:** Backend (Python) is the source of truth. `cr_store.py` (plugin root, stdlib only) owns all behaviour — a SQLite index it opens directly (not via `plugin_db`) plus per-version content files under `<plugin-data>/hephastion/creator/`. `cr_tools.py` (plugin root) registers 3 agent tools + a system-prompt section. `dashboard/cr_api.py` exposes the same behaviour over HTTP under `/api/plugins/hephastion/creator/`. The renderer half is a new `// ===== CREATOR =====` block in the existing single-file `desktop/plugin.js`, reached from Knowledge's `register(ctx)` by one guarded `crRegister(ctx)` call. Phase 2+ vendors libraries in `dashboard/creator-libs/` (a committed, pinned build) and ships them to the renderer as JSON envelopes because `ctx.rest` is JSON-only.
 
 **Tech Stack:** Python 3.11+ stdlib (`sqlite3`, `hashlib`, `json`, `re`, `pathlib`, `base64`, `subprocess`), FastAPI `APIRouter` (already a Hermes dependency), `starlette.testclient` for backend tests. Renderer: ESM + React via `@hermes/plugin-sdk`, `react`, `react/jsx-runtime` only — no build step. Vendored libs (Phase 2+): esbuild-wasm, a curated React import set, a Tailwind compiler, CodeMirror 6 — each pre-bundled offline into a zero-import ESM file by `dashboard/creator-libs/build.mjs` (pinned toolchain + lockfile).
 
@@ -17,10 +17,10 @@ Copied from the spec. Every task's requirements implicitly include this section.
 - **Renderer imports:** `desktop/plugin.js` may import only `@hermes/plugin-sdk`, `react`, `react/jsx-runtime`. Any other bare/relative/URL specifier is an up-front load error. `plugin.js` stays **one file**; Creator adds only `cr*`-prefixed top-level symbols and references **zero** Knowledge symbols. It captures its own `const crCtx = ctx` inside `crRegister` — never Knowledge's module-level `CTX`.
 - **`crRegister(ctx)` call site:** exactly one line, `try { crRegister(ctx) } catch (e) { host.notifyError?.(e, 'Creator failed to load') }`, added to Knowledge's **synchronous** `register(ctx)` body immediately after the `palette-reindex` `ctx.register({...})` call and before the async `rpcAvailable().then(...)` tail (`desktop/plugin.js:1189`).
 - **`ctx.rest` is JSON-only.** Every response body is `JSON.parse`d; HTML/`text/html` is rejected; there is no `responseType`/`arraybuffer`. All binary/large assets cross as a JSON envelope `{name, encoding: "utf8"|"base64", data, sha256}`; the renderer decodes. GET params are baked into the path (no `query` option). Pass an explicit `timeoutMs` for payloads over a few MB (default is 30 s).
-- **Store:** `cr_store` never uses `plugin_storage.plugin_db()` (it rejects nested filenames). It resolves `plugin_data_dir("hermes-workspace")` via a **function-body** `try: from plugins.plugin_storage import plugin_data_dir except Exception:` with a local `get_hermes_home` fallback, then opens `sqlite3.connect(<data>/creator/creator-index.db)` itself and applies, per connection: `PRAGMA journal_mode=WAL`, `PRAGMA foreign_keys=ON`, `PRAGMA busy_timeout=5000`, `isolation_level=None`, `check_same_thread=False`; `try/finally: conn.close()`. It never caches a `Path`. It never writes under the install dir `<HERMES_HOME>/plugins/hermes-workspace/`.
+- **Store:** `cr_store` never uses `plugin_storage.plugin_db()` (it rejects nested filenames). It resolves `plugin_data_dir("hephastion")` via a **function-body** `try: from plugins.plugin_storage import plugin_data_dir except Exception:` with a local `get_hermes_home` fallback, then opens `sqlite3.connect(<data>/creator/creator-index.db)` itself and applies, per connection: `PRAGMA journal_mode=WAL`, `PRAGMA foreign_keys=ON`, `PRAGMA busy_timeout=5000`, `isolation_level=None`, `check_same_thread=False`; `try/finally: conn.close()`. It never caches a `Path`. It never writes under the install dir `<HERMES_HOME>/plugins/hephastion/`.
 - **Module import safety:** `cr_store.py` and `dashboard/cr_api.py` have **module-level imports = stdlib + FastAPI only**. `plugin_data_dir`, `SessionDB`, and Knowledge-module imports live in function bodies, try/except-guarded. `cr_store.py` has **no relative imports** (it is loaded both as a package submodule by `__init__.py` and by explicit path from `dashboard/`). `dashboard/cr_api.py` loads `cr_store.py` by explicit path (`importlib.util.spec_from_file_location`). The plugin root is **never** added to `sys.path`.
-- **Defensive dashboard mount:** `dashboard/plugin_api.py` gains `import logging` and wraps the Creator wiring: `try: import cr_api; router.include_router(cr_api.router) except Exception as e: logging.getLogger(__name__).warning("creator API not mounted: %s", e)`. Any import-time throw in a Creator file must leave every `hw_*` route mounted.
-- **Route namespace:** `cr_api.router = APIRouter(prefix="/creator")`. Every Creator route is under `/api/plugins/hermes-workspace/creator/…`.
+- **Defensive dashboard mount:** `dashboard/plugin_api.py` gains `import logging` and wraps the Creator wiring: `try: import cr_api; router.include_router(cr_api.router) except Exception as e: logging.getLogger(__name__).warning("creator API not mounted: %s", e)`. Any import-time throw in a Creator file must leave every `hephastion_*` route mounted.
+- **Route namespace:** `cr_api.router = APIRouter(prefix="/creator")`. Every Creator route is under `/api/plugins/hephastion/creator/…`.
 - **`plugin.yaml`:** add `kind: standalone` and `provides_tools: [create_artifact, update_artifact, read_artifact]`. No `provides_hooks`. The tool file is **`cr_tools.py`**, never `tools.py`.
 - **Session ids:** the renderer sends `host.state.focusedStoredSessionId` (the stored `YYYYMMDD_HHMMSS_xxxxxx` key, equal to a tool handler's `kwargs["session_id"]`) for the scan POST, `GET /creator/artifacts?session_id=`, and auto-follow. It sends `host.state.focusedSessionId || host.state.activeSessionId` (the runtime id; `||` not `??` because it can be `""`) only for `llm.oneshot` (Phase 4).
 - **`read_artifact` returns full content** — never truncated. Only the `create_artifact` / `update_artifact` *result* echo is capped (10 KB `content`, 4 KB `diff`). `update_artifact` rejects a payload containing the pathological-size note string.
@@ -34,7 +34,7 @@ Copied from the spec. Every task's requirements implicitly include this section.
 ## File Structure
 
 ```
-plugin/hermes-workspace/
+plugin/hephastion/
 ├── plugin.yaml                 # Task 1  — + kind: standalone, + provides_tools
 ├── __init__.py                 # Task 1  — NEW, plugin root: def register(ctx)
 ├── cr_tools.py                 # Tasks 1, 9, 23 — NEW, plugin root: agent tools + prompt section
@@ -70,10 +70,10 @@ Backend is fully buildable and testable (Tasks 1–12) before any renderer code 
 ### Task 1: Plugin skeleton — manifest, package init, module stubs
 
 **Files:**
-- Modify: `plugin/hermes-workspace/plugin.yaml`
-- Create: `plugin/hermes-workspace/__init__.py`
-- Create: `plugin/hermes-workspace/cr_tools.py`
-- Create: `plugin/hermes-workspace/cr_store.py`
+- Modify: `plugin/hephastion/plugin.yaml`
+- Create: `plugin/hephastion/__init__.py`
+- Create: `plugin/hephastion/cr_tools.py`
+- Create: `plugin/hephastion/cr_store.py`
 - Test: `cr_store.py` `_selfcheck()` (skeleton), run via `python cr_store.py`
 
 **Interfaces:**
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     print("ok")
 ```
 
-- [ ] **Step 2: Run it, verify it fails** — `python plugin/hermes-workspace/cr_store.py` → `NameError: name 'normalize' is not defined`.
+- [ ] **Step 2: Run it, verify it fails** — `python plugin/hephastion/cr_store.py` → `NameError: name 'normalize' is not defined`.
 
 - [ ] **Step 3: Minimal implementation** — add to `cr_store.py`:
 
@@ -106,7 +106,7 @@ def normalize(content: str) -> str:
     return content.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
 ```
 
-- [ ] **Step 4: Run it, verify pass** — `python plugin/hermes-workspace/cr_store.py` → `ok`.
+- [ ] **Step 4: Run it, verify pass** — `python plugin/hephastion/cr_store.py` → `ok`.
 
 - [ ] **Step 5: `plugin.yaml`** — add two keys (leave the existing four):
 
@@ -121,7 +121,7 @@ provides_tools:
 - [ ] **Step 6: `__init__.py`** (plugin root):
 
 ```python
-"""Hermes Workspace plugin — agent-side entry. Knowledge has no agent half yet; Creator registers here."""
+"""Hephastion plugin — agent-side entry. Knowledge has no agent half yet; Creator registers here."""
 
 
 def register(ctx) -> None:
@@ -140,14 +140,14 @@ def register(ctx) -> None:
     pass  # Task 9 fills this in
 ```
 
-- [ ] **Step 8: Commit** — `git add plugin/hermes-workspace/{plugin.yaml,__init__.py,cr_tools.py,cr_store.py} && git commit -m "Add Creator plugin skeleton and manifest keys"`
+- [ ] **Step 8: Commit** — `git add plugin/hephastion/{plugin.yaml,__init__.py,cr_tools.py,cr_store.py} && git commit -m "Add Creator plugin skeleton and manifest keys"`
 
 ---
 
 ### Task 2: `cr_store` — data dir, connection, schema
 
 **Files:**
-- Modify: `plugin/hermes-workspace/cr_store.py`
+- Modify: `plugin/hephastion/cr_store.py`
 - Test: `cr_store._selfcheck()`
 
 **Interfaces:**
@@ -182,7 +182,7 @@ finally:
 
 - [ ] **Step 2: Run, verify fail** — `NameError: _creator_dir`.
 
-- [ ] **Step 3: Implement** — add to `cr_store.py`. `_hermes_home()` mirrors the Knowledge `hw_store` fallback; `_connect()` applies the Global-Constraints PRAGMA set and runs the schema DDL from spec §5.2 verbatim (all `CREATE TABLE`/`CREATE INDEX` with `IF NOT EXISTS`):
+- [ ] **Step 3: Implement** — add to `cr_store.py`. `_hermes_home()` mirrors the Knowledge `hephastion_store` fallback; `_connect()` applies the Global-Constraints PRAGMA set and runs the schema DDL from spec §5.2 verbatim (all `CREATE TABLE`/`CREATE INDEX` with `IF NOT EXISTS`):
 
 ```python
 def _hermes_home() -> Path:
@@ -196,9 +196,9 @@ def _hermes_home() -> Path:
 def _creator_dir() -> Path:
     try:
         from plugins.plugin_storage import plugin_data_dir
-        base = Path(plugin_data_dir("hermes-workspace"))
+        base = Path(plugin_data_dir("hephastion"))
     except Exception:
-        base = _hermes_home() / "plugin-data" / "hermes-workspace"
+        base = _hermes_home() / "plugin-data" / "hephastion"
     d = base / "creator"
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -456,7 +456,7 @@ assert get_config()["project_root"] is None
 ### Task 9: `cr_tools` — register the 3 agent tools + system-prompt section
 
 **Files:**
-- Modify: `plugin/hermes-workspace/cr_tools.py`
+- Modify: `plugin/hephastion/cr_tools.py`
 - Test: `cr_tools.py` `_selfcheck()` (a fake ctx), added to selftest MODULES-style call in Task 12.
 
 **Interfaces:**
@@ -485,7 +485,7 @@ def _selfcheck() -> None:
 
 (`import os` at top of `cr_tools.py`; `tool_result`/`tool_error` — import `from tools.registry import tool_result, tool_error` inside `register`/handlers guarded, or define thin local fallbacks for the selftest: `def _result(s): return s` when the import fails.)
 
-- [ ] **Step 2: Run** — `python -c "import sys; sys.path.insert(0,'plugin/hermes-workspace'); import cr_tools; cr_tools._selfcheck()"` → fails (`_h_create` undefined). Note: for the selftest, `cr_tools.py`'s `from . import cr_store` must degrade to a path import when run outside the package — guard it:
+- [ ] **Step 2: Run** — `python -c "import sys; sys.path.insert(0,'plugin/hephastion'); import cr_tools; cr_tools._selfcheck()"` → fails (`_h_create` undefined). Note: for the selftest, `cr_tools.py`'s `from . import cr_store` must degrade to a path import when run outside the package — guard it:
 
 ```python
 try:
@@ -556,7 +556,7 @@ finally:
 ### Task 11: `dashboard/cr_api.py` — router + Phase 1 endpoints
 
 **Files:**
-- Create: `plugin/hermes-workspace/dashboard/cr_api.py`
+- Create: `plugin/hephastion/dashboard/cr_api.py`
 - Test: added in Task 12's `selftest.py` round-trip.
 
 **Interfaces:**
@@ -574,7 +574,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 _p = Path(__file__).resolve().parent.parent / "cr_store.py"
-_s = importlib.util.spec_from_file_location("hw_cr_store", _p)
+_s = importlib.util.spec_from_file_location("hephastion_cr_store", _p)
 cr_store = importlib.util.module_from_spec(_s)
 _s.loader.exec_module(cr_store)
 
@@ -602,7 +602,7 @@ def _guard(fn):
 
 Implement each route. `POST /artifacts/{id}/versions`: exactly one of `content`/`restore_from` (400 else); `content` over `MAX_BYTES` → 400 `{error:"too_large"}`.
 
-- [ ] **Step 2: Run** — `python -c "import sys;sys.path.insert(0,'plugin/hermes-workspace/dashboard');import cr_api;print(len(cr_api.router.routes))"` → prints a route count ≥ 8.
+- [ ] **Step 2: Run** — `python -c "import sys;sys.path.insert(0,'plugin/hephastion/dashboard');import cr_api;print(len(cr_api.router.routes))"` → prints a route count ≥ 8.
 - [ ] **Step 3: Commit** — `"Add Creator HTTP router and Phase 1 endpoints"`
 
 ---
@@ -610,8 +610,8 @@ Implement each route. `POST /artifacts/{id}/versions`: exactly one of `content`/
 ### Task 12: Dashboard wiring — `plugin_api.py` + `selftest.py`
 
 **Files:**
-- Modify: `plugin/hermes-workspace/dashboard/plugin_api.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py`
+- Modify: `plugin/hephastion/dashboard/plugin_api.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py`
 - Test: `python dashboard/selftest.py` green, including the defensive-mount case.
 
 **Interfaces:**
@@ -662,7 +662,7 @@ def _selfcheck_creator_http() -> None:
             assert c.get("/creator/artifacts/my-doc").status_code == 404
             # config
             assert c.post("/creator/config", json={"github_token": "t"}).json()["github_token_set"]
-            # defensive mount: a broken cr_api import must not unmount hw_* routes
+            # defensive mount: a broken cr_api import must not unmount hephastion_* routes
             import plugin_api, importlib
             assert any(r.path == "/status" for r in plugin_api.router.routes)
     finally:
@@ -674,7 +674,7 @@ def _selfcheck_creator_http() -> None:
 (Drop the `r.status_code == 404` line if create-via-HTTP is not wanted — Phase 1 has no `POST /artifacts` create endpoint; artifacts are born from the tool or the scan. Keep the comment.)
 
 - [ ] **Step 2: Run** — `python dashboard/selftest.py` fails at the new functions.
-- [ ] **Step 3: Implement** — (a) `plugin_api.py`: add `import logging` near the top; after the `hw_*` imports add the guarded block from Global Constraints. (b) `selftest.py`: add the two functions; call them in `__main__` after the existing checks; add a defensive-mount sub-check that monkeypatches `builtins.__import__` to raise on `"cr_api"`, re-execs `plugin_api` via `importlib.reload`, and asserts `/status` still present + a warning logged.
+- [ ] **Step 3: Implement** — (a) `plugin_api.py`: add `import logging` near the top; after the `hephastion_*` imports add the guarded block from Global Constraints. (b) `selftest.py`: add the two functions; call them in `__main__` after the existing checks; add a defensive-mount sub-check that monkeypatches `builtins.__import__` to raise on `"cr_api"`, re-execs `plugin_api` via `importlib.reload`, and asserts `/status` still present + a warning logged.
 - [ ] **Step 4: Run** — `python dashboard/selftest.py` → `ok`.
 - [ ] **Step 5: Commit** — `"Wire Creator API into the dashboard mount and selftest"`
 
@@ -683,7 +683,7 @@ def _selfcheck_creator_http() -> None:
 ### Task 13: `plugin.js` — `crRegister` + the Creator pane (Phase 1 UI)
 
 **Files:**
-- Modify: `plugin/hermes-workspace/desktop/plugin.js`
+- Modify: `plugin/hephastion/desktop/plugin.js`
 - Test: `node --check`; manual checklist (spec §9.2 Phase 1).
 
 **Interfaces:**
@@ -717,11 +717,11 @@ function crRegister(ctx) {
     { id: 'cr-status', area: STATUSBAR_AREAS.right, order: 71,
       render: () => jsx(CrStatusItem, {}) },
     { id: 'cr-palette-open', area: PALETTE_AREA,
-      data: { id: 'hermes-workspace.open-creator', label: 'Open Creator',
+      data: { id: 'hephastion.open-creator', label: 'Open Creator',
               keywords: ['creator', 'artifact', 'preview', 'code'],
-              run: () => host.panes?.reveal?.('hermes-workspace.cr-pane') } },
+              run: () => host.panes?.reveal?.('hephastion.cr-pane') } },
     { id: 'cr-palette-scan', area: PALETTE_AREA,
-      data: { id: 'hermes-workspace.creator-rescan', label: 'Creator: rescan this chat',
+      data: { id: 'hephastion.creator-rescan', label: 'Creator: rescan this chat',
               keywords: ['creator', 'scan', 'artifact', 'rescan'],
               run: () => crScan().then(() => host.notify({ kind: 'info', message: 'Rescanned' }))
                 .catch((e) => host.notifyError(e, 'Rescan failed')) } },
@@ -736,7 +736,7 @@ try { crRegister(ctx) } catch (e) { host.notifyError?.(e, 'Creator failed to loa
 ```
 
 - [ ] **Step 3: `CrErrorBoundary`** — a minimal React class component (Creator's own inner boundary, spec §3.6) rendering a one-line fallback.
-- [ ] **Step 4: Run** — `node --check plugin/hermes-workspace/desktop/plugin.js` → clean.
+- [ ] **Step 4: Run** — `node --check plugin/hephastion/desktop/plugin.js` → clean.
 - [ ] **Step 5: Manual** — copy the plugin to `~/.hermes/plugins/`, restart Hermes, run the spec §9.2 Phase-1 checklist (create an artifact from a chat via a tool call; the pane shows it; edit + Save → v2; step + restore; each of the 5 types renders; picker works; kill the dashboard and confirm the pane retries).
 - [ ] **Step 6: Commit** — `"Add the Creator pane and renderer registration"`
 
@@ -748,7 +748,7 @@ try { crRegister(ctx) } catch (e) { host.notifyError?.(e, 'Creator failed to loa
 - Modify: `README.md`
 - Test: full `python dashboard/selftest.py` + `node --check` + spec §9.2 Phase-1 checklist.
 
-- [ ] **Step 1** — `README.md`: add a "Creator" section and correct the install steps for **both** modules per spec §12: (1) copy `plugin/hermes-workspace/` to `~/.hermes/plugins/hermes-workspace/`; (2) `hermes plugins enable hermes-workspace` (adds `plugins.enabled`; enables the agent + dashboard halves of Knowledge **and** Creator); (3) restart Hermes Desktop — the renderer half auto-loads on discovery, no Settings toggle needed (it can be *disabled* in Settings → Plugins); (4) tools + "Open Creator" appear.
+- [ ] **Step 1** — `README.md`: add a "Creator" section and correct the install steps for **both** modules per spec §12: (1) copy `plugin/hephastion/` to `~/.hermes/plugins/hephastion/`; (2) `hermes plugins enable hephastion` (adds `plugins.enabled`; enables the agent + dashboard halves of Knowledge **and** Creator); (3) restart Hermes Desktop — the renderer half auto-loads on discovery, no Settings toggle needed (it can be *disabled* in Settings → Plugins); (4) tools + "Open Creator" appear.
 - [ ] **Step 2** — run `python dashboard/selftest.py` → `ok`; `node --check desktop/plugin.js` → clean.
 - [ ] **Step 3** — walk the full spec §9.2 Phase-1 manual checklist once more end to end.
 - [ ] **Step 4: Commit** — `"Document Creator install and the plugin enable/gate split"`
@@ -764,9 +764,9 @@ Opens with a **proof-of-life spike** (Tasks 15–17): prove the JSON-envelope tr
 ### Task 15: `creator-libs/` build harness — esbuild only (spike scope)
 
 **Files:**
-- Create: `plugin/hermes-workspace/dashboard/creator-libs/package.json`
-- Create: `plugin/hermes-workspace/dashboard/creator-libs/package-lock.json` (committed)
-- Create: `plugin/hermes-workspace/dashboard/creator-libs/build.mjs`
+- Create: `plugin/hephastion/dashboard/creator-libs/package.json`
+- Create: `plugin/hephastion/dashboard/creator-libs/package-lock.json` (committed)
+- Create: `plugin/hephastion/dashboard/creator-libs/build.mjs`
 - Create (build output, committed): `esbuild.wasm`, `esbuild.js`, `MANIFEST.json`
 - Test: a `dashboard/creator-libs/verify.mjs` that `node --check`s each `.js` output and checks the wasm magic bytes; run in Step 4.
 
@@ -802,8 +802,8 @@ console.log('verify ok')
 ### Task 16: `cr_api` — the JSON asset envelope route
 
 **Files:**
-- Modify: `plugin/hermes-workspace/dashboard/cr_api.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py`
+- Modify: `plugin/hephastion/dashboard/cr_api.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py`
 - Test: `selftest.py` — envelope shape + decode round-trip.
 
 **Interfaces:**
@@ -831,13 +831,13 @@ assert c.get("/creator/asset/nope.js").status_code == 404
 **Files:** Modify `plugin.js`; Test `node --check` + **manual proof-of-life**.
 
 **Interfaces:**
-- Produces: `crAsset(name) -> Promise<Uint8Array|string>` (fetch the envelope with `timeoutMs: 120000`, decode by `encoding`, verify `sha256`, cache in a `Map`); `crEsbuild() -> Promise<esbuild>` (once: `crAsset('esbuild.js')` → blob-import → `esbuild.initialize({ wasmModule: await WebAssembly.compile(await crAsset('esbuild.wasm')), worker: true })`, falling back to `worker: false` on failure); a dev palette command `hermes-workspace.creator-esbuild-smoke`.
+- Produces: `crAsset(name) -> Promise<Uint8Array|string>` (fetch the envelope with `timeoutMs: 120000`, decode by `encoding`, verify `sha256`, cache in a `Map`); `crEsbuild() -> Promise<esbuild>` (once: `crAsset('esbuild.js')` → blob-import → `esbuild.initialize({ wasmModule: await WebAssembly.compile(await crAsset('esbuild.wasm')), worker: true })`, falling back to `worker: false` on failure); a dev palette command `hephastion.creator-esbuild-smoke`.
 
 - [ ] **Step 1: Implement** `crAsset`, `crEsbuild`, and the smoke command:
 
 ```js
 { id: 'cr-palette-smoke', area: PALETTE_AREA,
-  data: { id: 'hermes-workspace.creator-esbuild-smoke', label: 'Creator: esbuild smoke test',
+  data: { id: 'hephastion.creator-esbuild-smoke', label: 'Creator: esbuild smoke test',
     run: async () => {
       const es = await crEsbuild()
       const r = await es.build({ stdin: { contents: 'export default () => 42', loader: 'js' },
@@ -1128,11 +1128,11 @@ assert not (_creator_dir() / "app" / "storage.json").read_text().__contains__("c
 **Interfaces:**
 - Produces:
   - `GET /creator/artifacts/{id}/storage` (returns the whole object) and `POST /creator/artifacts/{id}/storage {op, key?, value?}` — **key in the body**.
-  - `GET /creator/readfile?scheme=&path=` → JSON envelope (§3.6). Schemes: `artifact` (`_creator_dir()/<dir>/files/<path>`), `vault` (explicit-path import of the Knowledge note-read helper — `importlib.util.spec_from_file_location` on `dashboard/hw_context.py` or the relevant `hw_*`; call its path-guarded read; **no HTTP to Knowledge**), `project` (`cr_store.get_config()["project_root"] / <path>`). All read-only, path-guarded (`resolve().is_relative_to(root)`, refuse `islink`), 1 MB cap. Unconfigured scheme → 400 `{error:"scheme_unavailable"}`.
+  - `GET /creator/readfile?scheme=&path=` → JSON envelope (§3.6). Schemes: `artifact` (`_creator_dir()/<dir>/files/<path>`), `vault` (explicit-path import of the Knowledge note-read helper — `importlib.util.spec_from_file_location` on `dashboard/hephastion_context.py` or the relevant `hephastion_*`; call its path-guarded read; **no HTTP to Knowledge**), `project` (`cr_store.get_config()["project_root"] / <path>`). All read-only, path-guarded (`resolve().is_relative_to(root)`, refuse `islink`), 1 MB cap. Unconfigured scheme → 400 `{error:"scheme_unavailable"}`.
   - `GET /creator/readdir?scheme=&path=` → `{entries: [{name, dir: bool}]}`, same guards.
 - Produces in `cr_store`: `read_scoped(scheme, path, project_root, vault_reader) -> bytes` and `list_scoped(...)` — the pure path-guard + read logic, so it is `_selfcheck`-able without HTTP.
 
-- [ ] **Step 1: Failing test** — `selftest`: seed an `app` artifact + drop a file into `creator/<dir>/files/data.csv`; `GET /creator/readfile?scheme=artifact&path=data.csv` → envelope decoding to the CSV. Configure a `project_root` with a file → `scheme=project` reads it; `path=../escape` → 400. `scheme=vault` with no Knowledge vault configured → 400 `scheme_unavailable`; with one configured (seed via `hw_store`) → reads a note. `scheme=bogus` → 400. Storage: `POST .../storage {op:"set", key:"a/b", value:1}` then `{op:"get", key:"a/b"}` → `1` (slash key survives because it's in the body).
+- [ ] **Step 1: Failing test** — `selftest`: seed an `app` artifact + drop a file into `creator/<dir>/files/data.csv`; `GET /creator/readfile?scheme=artifact&path=data.csv` → envelope decoding to the CSV. Configure a `project_root` with a file → `scheme=project` reads it; `path=../escape` → 400. `scheme=vault` with no Knowledge vault configured → 400 `scheme_unavailable`; with one configured (seed via `hephastion_store`) → reads a note. `scheme=bogus` → 400. Storage: `POST .../storage {op:"set", key:"a/b", value:1}` then `{op:"get", key:"a/b"}` → `1` (slash key survives because it's in the body).
 - [ ] **Step 2–4:** implement, run `python dashboard/selftest.py` → `ok`.
 - [ ] **Step 5: Commit** — `"Add Creator storage and scoped file-read endpoints"`
 

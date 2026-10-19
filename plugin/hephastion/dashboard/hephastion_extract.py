@@ -3,7 +3,7 @@ import json
 import re
 import unicodedata
 
-import hw_context
+import hephastion_context
 
 PROVIDER_DENY_RE = re.compile(
     r"\b(claude|anthropic|gpt|openai|gemini|grok|xai|llama|mistral|ollama|copilot)\b", re.I)
@@ -65,7 +65,7 @@ def render_transcript(messages: list[dict]) -> str:
         role = m.get("role")
         if role not in ("user", "assistant"):
             continue
-        text = hw_context.strip_vault_context(m.get("text") or m.get("content") or "")
+        text = hephastion_context.strip_vault_context(m.get("text") or m.get("content") or "")
         if text.strip():
             out.append(f"{role.upper()}: {text.strip()}")
     joined = "\n\n".join(out)
@@ -134,8 +134,8 @@ def validate_candidate(c: dict) -> dict | None:
 
 def _selfcheck() -> None:
     msgs = [
-        {"role": "user", "text": hw_context.VAULT_CONTEXT_OPEN + "\nnote stuff\n"
-         + hw_context.VAULT_CONTEXT_CLOSE + "\nI switched my editor to Helix."},
+        {"role": "user", "text": hephastion_context.VAULT_CONTEXT_OPEN + "\nnote stuff\n"
+         + hephastion_context.VAULT_CONTEXT_CLOSE + "\nI switched my editor to Helix."},
         {"role": "assistant", "text": "Noted."},
         {"role": "tool", "text": "should be dropped"},
     ]

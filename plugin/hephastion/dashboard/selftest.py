@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-MODULES = ["hw_store", "hw_notes", "hw_index", "hw_context", "hw_merge", "hw_extract"]  # grows each task
+MODULES = ["hephastion_store", "hephastion_notes", "hephastion_index", "hephastion_context", "hephastion_merge", "hephastion_extract"]  # grows each task
 
 
 def run_module_checks() -> None:
@@ -29,24 +29,24 @@ def _client():
 
 def _selfcheck_http_read() -> None:
     import tempfile
-    import hw_store
-    import hw_index
+    import hephastion_store
+    import hephastion_index
 
     saved_home = os.environ.get("HERMES_HOME")
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             os.environ["HERMES_HOME"] = os.path.join(d, "home")
-            hw_store._cache = None
+            hephastion_store._cache = None
             vault = os.path.join(d, "vault")
             os.makedirs(os.path.join(vault, "Areas"))
             open(os.path.join(vault, "Areas", "Argos.md"), "w", encoding="utf-8").write(
                 "# Argos\n\nwidget engine\n\n## History\n\n- **2026-08-20** — merged.\n")
 
-            hw_index.reset_for_tests()
+            hephastion_index.reset_for_tests()
             c = _client()
             # no vault configured yet: /status must not construct an Index
             assert c.get("/status").status_code == 200
-            assert hw_index._INDEX is None
+            assert hephastion_index._INDEX is None
 
             assert c.post("/config", json={"vault": vault}).json()["vault_exists"]
             c.post("/reindex", json={"full": True})
@@ -58,8 +58,8 @@ def _selfcheck_http_read() -> None:
             assert c.get("/tree", params={"path": "../x"}).status_code == 400
             assert c.get("/note", params={"path": "Areas/Nope.md"}).status_code == 404
     finally:
-        hw_index.reset_for_tests()
-        hw_store._cache = None
+        hephastion_index.reset_for_tests()
+        hephastion_store._cache = None
         if saved_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:
@@ -69,14 +69,14 @@ def _selfcheck_http_read() -> None:
 
 def _selfcheck_http_write() -> None:
     import tempfile
-    import hw_store
-    import hw_index
+    import hephastion_store
+    import hephastion_index
 
     saved_home = os.environ.get("HERMES_HOME")
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             os.environ["HERMES_HOME"] = os.path.join(d, "home")
-            hw_store._cache = None
+            hephastion_store._cache = None
             vault = os.path.join(d, "vault")
             os.makedirs(os.path.join(vault, "Areas"))
             argos = os.path.join(vault, "Areas", "Argos.md")
@@ -84,7 +84,7 @@ def _selfcheck_http_write() -> None:
                 "# Argos\n\nwidget engine\n\n## History\n\n- **2026-08-20** — merged.\n")
             original = open(argos, "rb").read()
 
-            hw_index.reset_for_tests()
+            hephastion_index.reset_for_tests()
             c = _client()
             assert c.post("/config", json={"vault": vault}).json()["vault_exists"]
             c.post("/reindex", json={"full": True})
@@ -117,8 +117,8 @@ def _selfcheck_http_write() -> None:
             assert undo[0]["result"] in ("restored", "removed"), undo
             assert open(argos, "rb").read() == original  # fully reversible
     finally:
-        hw_index.reset_for_tests()
-        hw_store._cache = None
+        hephastion_index.reset_for_tests()
+        hephastion_store._cache = None
         if saved_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:
@@ -128,14 +128,14 @@ def _selfcheck_http_write() -> None:
 
 def _selfcheck_http_write_edges() -> None:
     import tempfile
-    import hw_store
-    import hw_index
+    import hephastion_store
+    import hephastion_index
 
     saved_home = os.environ.get("HERMES_HOME")
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             os.environ["HERMES_HOME"] = os.path.join(d, "home")
-            hw_store._cache = None
+            hephastion_store._cache = None
             vault = os.path.join(d, "vault")
             os.makedirs(os.path.join(vault, "Areas"))
             a = os.path.join(vault, "Areas", "A.md")
@@ -143,7 +143,7 @@ def _selfcheck_http_write_edges() -> None:
             open(a, "w", encoding="utf-8").write("# A\n\n## History\n\n- **2026-08-01** — one.\n")
             open(b, "w", encoding="utf-8").write("# B\n\n## History\n\n- **2026-08-01** — one.\n")
 
-            hw_index.reset_for_tests()
+            hephastion_index.reset_for_tests()
             c = _client()
             c.post("/config", json={"vault": vault})
             c.post("/reindex", json={"full": True})
@@ -176,8 +176,8 @@ def _selfcheck_http_write_edges() -> None:
 
             # the pending journal entry was rewritten with the real post-write
             # facts, and the conflicted item left no trace
-            import hw_merge
-            jitems = hw_merge._read_journal()[-1]["items"]
+            import hephastion_merge
+            jitems = hephastion_merge._read_journal()[-1]["items"]
             assert len(jitems) == 2, jitems
             assert all(it["sha_after"] and it["bak"] for it in jitems), jitems
             assert all(it["path"] == "Areas/A.md" for it in jitems), jitems
@@ -217,14 +217,14 @@ def _selfcheck_http_write_edges() -> None:
 
             # a dedup blowup on one item (a locked note -> PermissionError) must
             # not sink the batch: the item errors, the rest still commit.
-            real_dedup = hw_merge.dedup_entry
+            real_dedup = hephastion_merge.dedup_entry
 
             def _boom(line, *a, **k):
                 if "boom" in line:
                     raise PermissionError("note is locked")
                 return real_dedup(line, *a, **k)
 
-            hw_merge.dedup_entry = _boom
+            hephastion_merge.dedup_entry = _boom
             try:
                 out = c.post("/memories/commit", json={"items": [
                     {"target_path": "Areas/A.md", "history_line": "boom item.",
@@ -240,10 +240,10 @@ def _selfcheck_http_write_edges() -> None:
                      "candidate_index": 32}]})
                 assert pvr.status_code == 500, pvr.status_code
             finally:
-                hw_merge.dedup_entry = real_dedup
+                hephastion_merge.dedup_entry = real_dedup
     finally:
-        hw_index.reset_for_tests()
-        hw_store._cache = None
+        hephastion_index.reset_for_tests()
+        hephastion_store._cache = None
         if saved_home is None:
             os.environ.pop("HERMES_HOME", None)
         else:
@@ -368,7 +368,7 @@ def _selfcheck_creator_http() -> None:
                 except HTTPException as e:
                     assert e.status_code == 400, (bad, e.status_code)
             assert c.get("/creator/asset/nope.js").status_code == 404
-            # defensive mount: a broken cr_api import must not unmount hw_* routes
+            # defensive mount: a broken cr_api import must not unmount hephastion_* routes
             import plugin_api, importlib
             assert any(r.path == "/status" for r in plugin_api.router.routes)
     finally:
@@ -377,8 +377,159 @@ def _selfcheck_creator_http() -> None:
     print("  creator http round-trip ok")
 
 
+def _selfcheck_creator_export() -> None:
+    """Task 29: standalone `.html` export — html/svg/code/markdown each produce
+    a non-empty file on disk containing the artifact's content; markdown's file
+    also carries the inlined marked-only viewer-md.js bundle (the
+    `renderMarkdown` call the bootstrap script makes into it) but, per
+    final-review Fix 4, NOT the ~3.5MB mermaid renderer it never calls — so the
+    file stays small; `react` export returns 400 (assembled client-side in the
+    pane, not reproducible server-side)."""
+    import tempfile
+    saved = os.environ.get("HERMES_HOME")
+    try:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+            os.environ["HERMES_HOME"] = os.path.join(d, "home")
+            import cr_api
+            from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+            app = FastAPI(); app.include_router(cr_api.router)
+            c = TestClient(app)
+
+            seeds = {
+                "exp-html": ("html", "<h1>Hi There</h1>"),
+                "exp-svg": ("svg", "<svg><circle r='5'/></svg>"),
+                "exp-code": ("code", "print(1)\nprint(2)"),
+                "exp-md": ("markdown", "# Hello World"),
+            }
+            for ident, (type_, content) in seeds.items():
+                cr_api.cr_store.do_create(
+                    {"identifier": ident, "type": type_, "title": ident, "content": content},
+                    "sess-export")
+
+            paths = {}
+            for ident, (type_, content) in seeds.items():
+                r = c.post(f"/creator/artifacts/{ident}/export")
+                assert r.status_code == 200, (ident, r.status_code, r.text)
+                path = r.json()["path"]
+                assert os.path.isfile(path), path
+                text = open(path, encoding="utf-8").read()
+                assert text, f"{ident} export is empty"
+                assert content in text, (ident, content, text[:200])
+                paths[ident] = text
+
+            # markdown export carries the inlined viewer-md.js bundle: the
+            # bootstrap script literally calls mod.renderMarkdown(...). Final-
+            # review Fix 4 split marked out of the combined marked+mermaid
+            # viewer.js, so a markdown export must NOT drag in the mermaid
+            # renderer it never calls, and the file must stay well under the
+            # old combined bundle's multi-MB size.
+            assert "renderMarkdown" in paths["exp-md"]
+            assert "renderMermaidInto" not in paths["exp-md"]
+            assert len(paths["exp-md"]) < 500_000, len(paths["exp-md"])
+
+            # react: not reproducible server-side -> 400
+            cr_api.cr_store.do_create(
+                {"identifier": "exp-react", "type": "react", "title": "R",
+                 "content": "export default () => null"}, "sess-export")
+            rr = c.post("/creator/artifacts/exp-react/export")
+            assert rr.status_code == 400, rr.status_code
+
+            # write_export_bundle: pane-assembled HTML persisted verbatim
+            b = c.post("/creator/artifacts/exp-html/export/bundle",
+                      json={"html": "<!doctype html><html><body>bundled</body></html>"})
+            assert b.status_code == 200
+            bpath = b.json()["path"]
+            assert os.path.isfile(bpath)
+            assert open(bpath, encoding="utf-8").read() == \
+                "<!doctype html><html><body>bundled</body></html>"
+
+            # dest validation: relative path rejected
+            bad = c.post("/creator/artifacts/exp-html/export", json={"dest": "relative.html"})
+            assert bad.status_code == 400, bad.status_code
+    finally:
+        if saved is None: os.environ.pop("HERMES_HOME", None)
+        else: os.environ["HERMES_HOME"] = saved
+    print("  creator export ok")
+
+
+def _selfcheck_creator_publish() -> None:
+    """Task 31: POST /creator/artifacts/{id}/publish — routes through to
+    cr_store.publish_artifact and relays its result verbatim (200, even for
+    an {"error": ...} body — publish_artifact returns those for expected/
+    recoverable conditions rather than raising). Monkeypatches shutil.which +
+    subprocess.run (module-global, so cr_api's explicit-path-loaded cr_store
+    sees them too) so this NEVER shells out to the real `gh` CLI."""
+    import shutil
+    import subprocess
+    import tempfile
+    saved = os.environ.get("HERMES_HOME")
+    try:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+            os.environ["HERMES_HOME"] = os.path.join(d, "home")
+            import cr_api
+            from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+            app = FastAPI(); app.include_router(cr_api.router)
+            c = TestClient(app)
+
+            cr_api.cr_store.do_create(
+                {"identifier": "pub-http-doc", "type": "markdown", "title": "Pub Http Doc",
+                 "content": "# hi"}, "sess-publish")
+            cr_api.cr_store.do_create(
+                {"identifier": "pub-http-app", "type": "react", "title": "PubApp",
+                 "content": "export default () => null"}, "sess-publish")
+
+            orig_which, orig_run = shutil.which, subprocess.run
+
+            def fake_run(args, **kw):
+                if args[:2] == ["gh", "auth"]:
+                    return subprocess.CompletedProcess(args, 0, "", "")
+                if args[:3] == ["gh", "gist", "create"]:
+                    return subprocess.CompletedProcess(
+                        args, 0, "https://gist.github.com/testuser/deadbeef01\n", "")
+                raise AssertionError(f"unexpected subprocess.run in selftest: {args}")
+
+            shutil.which = lambda name: "/usr/bin/gh" if name == "gh" else None
+            subprocess.run = fake_run
+            try:
+                r = c.post("/creator/artifacts/pub-http-doc/publish")
+                assert r.status_code == 200, (r.status_code, r.text)
+                assert r.json() == {
+                    "url": "https://gist.github.com/testuser/deadbeef01",
+                    "raw_url": "https://raw.githack.com/testuser/deadbeef01/raw/pub-http-doc.html"}
+
+                rn = c.post("/creator/artifacts/pub-http-app/publish")
+                assert rn.status_code == 200 and rn.json() == {"error": "needs_pane"}
+
+                rh = c.post("/creator/artifacts/pub-http-app/publish",
+                           json={"html": "<html><body>x</body></html>"})
+                assert rh.status_code == 200 and rh.json()["url"].startswith(
+                    "https://gist.github.com/")
+            finally:
+                shutil.which, subprocess.run = orig_which, orig_run
+
+            shutil.which = lambda name: None
+            try:
+                rc = c.post("/creator/artifacts/pub-http-doc/publish")
+                assert rc.status_code == 200
+                assert rc.json() == {
+                    "error": "github_not_configured",
+                    "how": "install gh and run gh auth login, or set a token in Creator settings"}
+            finally:
+                shutil.which = orig_which
+
+            # unknown identifier -> 404 via _guard, like every other route
+            rm = c.post("/creator/artifacts/nope-pub/publish")
+            assert rm.status_code == 404, rm.status_code
+    finally:
+        if saved is None: os.environ.pop("HERMES_HOME", None)
+        else: os.environ["HERMES_HOME"] = saved
+    print("  creator publish ok")
+
+
 def _selfcheck_creator_defensive_mount() -> None:
-    """A throw from `import cr_api` must leave every hw_* route mounted and log a warning."""
+    """A throw from `import cr_api` must leave every hephastion_* route mounted and log a warning."""
     import builtins
     import importlib
     import logging
@@ -407,7 +558,7 @@ def _selfcheck_creator_defensive_mount() -> None:
         builtins.__import__ = _no_cr_api
         importlib.reload(plugin_api)
         broken = _paths(plugin_api)
-        assert "/status" in broken, "hw_* routes lost when cr_api import failed"
+        assert "/status" in broken, "hephastion_* routes lost when cr_api import failed"
         assert not any(p.startswith("/creator") for p in broken), broken
         assert any("creator API not mounted" in rec.getMessage()
                    for rec in records), [rec.getMessage() for rec in records]
@@ -429,5 +580,7 @@ if __name__ == "__main__":
     _selfcheck_cr_tools()
     _selfcheck_read_assistant_messages()
     _selfcheck_creator_http()
+    _selfcheck_creator_export()
+    _selfcheck_creator_publish()
     _selfcheck_creator_defensive_mount()
     print("ok")

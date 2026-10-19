@@ -2,9 +2,9 @@
 
 > **For implementers:** Implement this plan one task at a time. Each task ends at a commit and is independently testable. Review between tasks. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the Hermes Workspace Knowledge module — an Obsidian vault as model-independent long-term memory for Hermes Desktop, with a read path (composer toggle injects relevant notes) and a write path (a palette command extracts memories from a chat and appends them to the vault).
+**Goal:** Ship the Hephastion Knowledge module — an Obsidian vault as model-independent long-term memory for Hermes Desktop, with a read path (composer toggle injects relevant notes) and a write path (a palette command extracts memories from a chat and appends them to the vault).
 
-**Architecture:** A unified Hermes plugin at `~/.hermes/plugins/hermes-workspace/`. The renderer half (`desktop/plugin.js`, single ESM file) contributes UI and calls the gateway via `host.request`. The backend half (`dashboard/plugin_api.py`, FastAPI) owns all vault I/O, a SQLite FTS5 index, and the merge engine. They talk over `ctx.rest('/...')`. The backend is fully buildable and testable on its own (Tasks 1–12) before any renderer code (Tasks 13–16).
+**Architecture:** A unified Hermes plugin at `~/.hermes/plugins/hephastion/`. The renderer half (`desktop/plugin.js`, single ESM file) contributes UI and calls the gateway via `host.request`. The backend half (`dashboard/plugin_api.py`, FastAPI) owns all vault I/O, a SQLite FTS5 index, and the merge engine. They talk over `ctx.rest('/...')`. The backend is fully buildable and testable on its own (Tasks 1–12) before any renderer code (Tasks 13–16).
 
 **Tech Stack:** Python 3.11+ stdlib (`sqlite3`, `difflib`, `hashlib`, `json`, `re`, `pathlib`), FastAPI `APIRouter` (already a Hermes dependency), `starlette.testclient` (bundled with FastAPI) for backend tests. Renderer: ESM + React via `@hermes/plugin-sdk` and `react/jsx-runtime` only — no build step, no bundler.
 
@@ -16,14 +16,14 @@ Copied verbatim from the spec. Every task's requirements implicitly include this
 
 - **Renderer imports:** `desktop/plugin.js` may import only `@hermes/plugin-sdk`, `react`, `react/jsx-runtime`. Relative/URL imports do not resolve. `plugin.js` is therefore **one file**.
 - **No filesystem access in the renderer.** All vault I/O is in `dashboard/plugin_api.py`, reached via `ctx.rest`.
-- **Backend sibling imports:** `plugin_api.py` is loaded by path, not as a package. It must `sys.path.insert(0, os.path.dirname(__file__))` before importing its `hw_*` siblings.
-- **`plugins.enabled`:** a `user` plugin's Python backend loads only if `hermes-workspace` is listed in `plugins.enabled` in `~/.hermes/config.yaml`. Install docs must say so.
+- **Backend sibling imports:** `plugin_api.py` is loaded by path, not as a package. It must `sys.path.insert(0, os.path.dirname(__file__))` before importing its `hephastion_*` siblings.
+- **`plugins.enabled`:** a `user` plugin's Python backend loads only if `hephastion` is listed in `plugins.enabled` in `~/.hermes/config.yaml`. Install docs must say so.
 - **Gateway RPC (renderer only, via `host.request`):** `session.history { session_id } -> { count, messages: [{ role, text, timestamp?, row_id? }] }`; `llm.oneshot { instructions, input, session_id?, max_tokens?, temperature? } -> { text }` (non-streaming, inherits the active model when `session_id` is the focused session). Both must be feature-gated: if either resolves to "method not found", hide the extraction command; the read path still ships.
 - **No `type` field** on a memory. Candidate record is exactly `{ target: str, history_line: str, supersedes: str | None }`. Nothing branches on a memory category. "Also log to Timeline" = a second candidate with `target = "Timeline/<year>.md"`.
 - **No provenance marker.** An appended line is byte-identical to a hand-written one: `- **YYYY-MM-DD** — <one or two sentences>.` with an optional trailing ` *(supersedes: "<verbatim claim>")*`. No HTML comment, no `^block-id`, no tag, no zero-width chars.
 - **No YAML frontmatter** written by the plugin core. New notes get a plain `# Title` + `## History`.
 - **Conform to the vault's rules file.** Capture = append a dated line to a note's `## History`. Layout = `Areas/` `Topics/` `People/` `Timeline/<year>.md` `Profile.md`. If no `agent_rules.md` (or configured `rules_file`) exists, ship and use `dashboard/default_rules.md` stating the same behaviour.
-- **Index DB lives outside the vault** at `~/.hermes/plugins/hermes-workspace/data/index/<vault-hash>.db`. The dedup/undo **journal lives inside the vault** at `<vault>/.hermes/journal.json`. Per-note `.bak` files live in the plugin data dir.
+- **Index DB lives outside the vault** at `~/.hermes/plugins/hephastion/data/index/<vault-hash>.db`. The dedup/undo **journal lives inside the vault** at `<vault>/.hermes/journal.json`. Per-note `.bak` files live in the plugin data dir.
 - **Never write secrets.** Drop any candidate whose fields contain a password/API-key/token pattern. Skip frontmatter keys matching `/pass|secret|token|api[_-]?key$/i` during indexing.
 - **Model-independence:** scan every candidate string field for `claude, anthropic, gpt, openai, gemini, grok, xai, llama, mistral, ollama, copilot` (case-insensitive) and drop the candidate on a hit.
 - **No trace of AI authorship** anywhere: repo, code comments, commit messages, or written notes. Commit messages are plain and factual.
@@ -35,38 +35,38 @@ Copied verbatim from the spec. Every task's requirements implicitly include this
 ## File Structure
 
 ```
-Hermes-Workspace/
+Hephastion/
 ├── README.md                         # Task 16
 ├── LICENSE                            # Task 16 (MIT)
 ├── .gitignore                         # Task 16
 ├── docs/
 │   ├── design-knowledge-module.md     # exists
 │   └── plans/2026-08-30-knowledge-module.md
-└── plugin/hermes-workspace/           # copy this folder to ~/.hermes/plugins/
+└── plugin/hephastion/           # copy this folder to ~/.hermes/plugins/
     ├── plugin.yaml                    # Task 1  — agent-half manifest (minimal)
     ├── desktop/
     │   └── plugin.js                  # Tasks 13–15 — single-file renderer plugin
     └── dashboard/
         ├── manifest.json              # Task 1
         ├── plugin_api.py              # Tasks 1, 5, 12 — FastAPI router, endpoints
-        ├── hw_store.py                # Task 1  — config.json, path guard, vault-hash
-        ├── hw_notes.py                # Task 2  — parse_note()
-        ├── hw_index.py                # Tasks 3–4 — SQLite FTS5 index + search + sync
-        ├── hw_context.py              # Task 6  — injection block builder
-        ├── hw_merge.py                # Tasks 7–10 — resolve, render, splice, write, journal, dedup
-        ├── hw_extract.py              # Task 11 — prompt, transcript render, parse, validate
+        ├── hephastion_store.py                # Task 1  — config.json, path guard, vault-hash
+        ├── hephastion_notes.py                # Task 2  — parse_note()
+        ├── hephastion_index.py                # Tasks 3–4 — SQLite FTS5 index + search + sync
+        ├── hephastion_context.py              # Task 6  — injection block builder
+        ├── hephastion_merge.py                # Tasks 7–10 — resolve, render, splice, write, journal, dedup
+        ├── hephastion_extract.py              # Task 11 — prompt, transcript render, parse, validate
         ├── default_rules.md           # Task 1
         └── selftest.py                # Task 1 (skeleton), grows each task
 ```
 
 Responsibilities:
 
-- **`hw_store.py`** — the vault path (module global + `config.json` mirror), `vault_hash()`, `guard_path()`, `data_dir()`. Imported by everything.
-- **`hw_notes.py`** — pure: bytes/text → `{title, headings, tags, links, frontmatter, body}`. No I/O.
-- **`hw_index.py`** — owns the `.db`. `Index` class: `sync()`, `search()`, `status()`. Plus `sanitize_fts_query()`.
-- **`hw_context.py`** — pure given an `Index`: `build_context(index, query, budget_tokens, k_max) -> {notes, total_tokens, block}`.
-- **`hw_merge.py`** — `resolve_target()`, `render_line()`, `insert_history_line()`, `insert_timeline_line()`, `new_note_body()`, `atomic_write()`, `backup()`, `journal_append()`, `undo()`, `dedup_entry()`.
-- **`hw_extract.py`** — `build_prompt()`, `render_transcript()`, `parse_model_output()`, `validate_candidate()`.
+- **`hephastion_store.py`** — the vault path (module global + `config.json` mirror), `vault_hash()`, `guard_path()`, `data_dir()`. Imported by everything.
+- **`hephastion_notes.py`** — pure: bytes/text → `{title, headings, tags, links, frontmatter, body}`. No I/O.
+- **`hephastion_index.py`** — owns the `.db`. `Index` class: `sync()`, `search()`, `status()`. Plus `sanitize_fts_query()`.
+- **`hephastion_context.py`** — pure given an `Index`: `build_context(index, query, budget_tokens, k_max) -> {notes, total_tokens, block}`.
+- **`hephastion_merge.py`** — `resolve_target()`, `render_line()`, `insert_history_line()`, `insert_timeline_line()`, `new_note_body()`, `atomic_write()`, `backup()`, `journal_append()`, `undo()`, `dedup_entry()`.
+- **`hephastion_extract.py`** — `build_prompt()`, `render_transcript()`, `parse_model_output()`, `validate_candidate()`.
 - **`plugin_api.py`** — wiring only: the `APIRouter`, request/response shapes, `_sync()` calls, the path guard middleware. No business logic.
 
 ---
@@ -74,24 +74,24 @@ Responsibilities:
 ## Task 1: Scaffold, config, path guard
 
 **Files:**
-- Create: `plugin/hermes-workspace/plugin.yaml`
-- Create: `plugin/hermes-workspace/dashboard/manifest.json`
-- Create: `plugin/hermes-workspace/dashboard/hw_store.py`
-- Create: `plugin/hermes-workspace/dashboard/plugin_api.py`
-- Create: `plugin/hermes-workspace/dashboard/default_rules.md`
-- Create: `plugin/hermes-workspace/dashboard/selftest.py`
+- Create: `plugin/hephastion/plugin.yaml`
+- Create: `plugin/hephastion/dashboard/manifest.json`
+- Create: `plugin/hephastion/dashboard/hephastion_store.py`
+- Create: `plugin/hephastion/dashboard/plugin_api.py`
+- Create: `plugin/hephastion/dashboard/default_rules.md`
+- Create: `plugin/hephastion/dashboard/selftest.py`
 
 **Interfaces:**
 - Produces:
-  - `hw_store.set_vault(path: str) -> dict` — validates, persists to `config.json`, returns `status()`.
-  - `hw_store.get_config() -> dict` — `{ vault, k, budget_tokens, max_file_kb, rules_file }`.
-  - `hw_store.vault_path() -> pathlib.Path | None`
-  - `hw_store.vault_hash() -> str` — `sha1(realpath)[:12]`, or `"novault"`.
-  - `hw_store.data_dir() -> pathlib.Path` — `~/.hermes/plugins/hermes-workspace/data/` (respects `$HERMES_HOME`), created on first call.
-  - `hw_store.guard_path(rel: str) -> pathlib.Path` — resolved absolute path inside the vault; raises `hw_store.PathError` on traversal or symlink.
+  - `hephastion_store.set_vault(path: str) -> dict` — validates, persists to `config.json`, returns `status()`.
+  - `hephastion_store.get_config() -> dict` — `{ vault, k, budget_tokens, max_file_kb, rules_file }`.
+  - `hephastion_store.vault_path() -> pathlib.Path | None`
+  - `hephastion_store.vault_hash() -> str` — `sha1(realpath)[:12]`, or `"novault"`.
+  - `hephastion_store.data_dir() -> pathlib.Path` — `~/.hermes/plugins/hephastion/data/` (respects `$HERMES_HOME`), created on first call.
+  - `hephastion_store.guard_path(rel: str) -> pathlib.Path` — resolved absolute path inside the vault; raises `hephastion_store.PathError` on traversal or symlink.
   - `plugin_api.router` — FastAPI `APIRouter` with `GET /status`, `GET /config`, `POST /config`.
 
-- [ ] **Step 1: Write `hw_store.py`**
+- [ ] **Step 1: Write `hephastion_store.py`**
 
 ```python
 """Vault path, config persistence, and path-safety helpers."""
@@ -118,7 +118,7 @@ def _hermes_home() -> pathlib.Path:
 
 
 def data_dir() -> pathlib.Path:
-    d = _hermes_home() / "plugins" / "hermes-workspace" / "data"
+    d = _hermes_home() / "plugins" / "hephastion" / "data"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -216,7 +216,7 @@ def update_config(patch: dict) -> dict:
 - [ ] **Step 2: Write `plugin_api.py` skeleton**
 
 ```python
-"""Hermes Workspace — Knowledge module backend. Wiring only; logic lives in hw_*."""
+"""Hephastion — Knowledge module backend. Wiring only; logic lives in hephastion_*."""
 import os
 import sys
 
@@ -225,7 +225,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from fastapi import APIRouter, HTTPException  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
-import hw_store  # noqa: E402
+import hephastion_store  # noqa: E402
 
 router = APIRouter()
 
@@ -240,19 +240,19 @@ class ConfigPatch(BaseModel):
 
 @router.get("/status")
 def get_status() -> dict:
-    return hw_store.status()
+    return hephastion_store.status()
 
 
 @router.get("/config")
 def read_config() -> dict:
-    return hw_store.get_config()
+    return hephastion_store.get_config()
 
 
 @router.post("/config")
 def write_config(patch: ConfigPatch) -> dict:
     try:
-        return hw_store.update_config(patch.model_dump())
-    except hw_store.PathError as e:
+        return hephastion_store.update_config(patch.model_dump())
+    except hephastion_store.PathError as e:
         raise HTTPException(status_code=400, detail=str(e))
 ```
 
@@ -261,7 +261,7 @@ def write_config(patch: ConfigPatch) -> dict:
 `dashboard/manifest.json`:
 ```json
 {
-  "name": "hermes-workspace",
+  "name": "hephastion",
   "label": "Knowledge",
   "description": "Your Obsidian vault as long-term memory for Hermes.",
   "icon": "BookMarked",
@@ -272,7 +272,7 @@ def write_config(patch: ConfigPatch) -> dict:
 
 `plugin.yaml`:
 ```yaml
-name: hermes-workspace
+name: hephastion
 version: 0.1.0
 description: Your Obsidian vault as long-term memory for Hermes.
 author: Yuuzulight
@@ -316,7 +316,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-MODULES = ["hw_store"]  # grows each task
+MODULES = ["hephastion_store"]  # grows each task
 
 
 def run_module_checks() -> None:
@@ -328,59 +328,59 @@ def run_module_checks() -> None:
 
 
 def _selfcheck_store() -> None:
-    import hw_store
+    import hephastion_store
     with tempfile.TemporaryDirectory() as d:
         os.environ["HERMES_HOME"] = os.path.join(d, "home")
-        hw_store._cache = None
+        hephastion_store._cache = None
         vault = os.path.join(d, "vault")
         os.makedirs(vault)
-        st = hw_store.set_vault(vault)
+        st = hephastion_store.set_vault(vault)
         assert st["vault_exists"] and st["writable"], st
-        hw_store._cache = None
-        assert hw_store.get_config()["vault"] == vault
+        hephastion_store._cache = None
+        assert hephastion_store.get_config()["vault"] == vault
         try:
-            hw_store.guard_path("../escape")
+            hephastion_store.guard_path("../escape")
             raise AssertionError("traversal not blocked")
-        except hw_store.PathError:
+        except hephastion_store.PathError:
             pass
-        assert hw_store.guard_path("Areas/x.md").name == "x.md"
+        assert hephastion_store.guard_path("Areas/x.md").name == "x.md"
 
 
 if __name__ == "__main__":
-    hw_store_mod = __import__("hw_store")
-    hw_store_mod._selfcheck = _selfcheck_store  # attach for the runner
+    hephastion_store_mod = __import__("hephastion_store")
+    hephastion_store_mod._selfcheck = _selfcheck_store  # attach for the runner
     run_module_checks()
     print("ok")
 ```
 
 - [ ] **Step 5: Run the self-check**
 
-Run: `cd plugin/hermes-workspace/dashboard && python selftest.py`
-Expected: `hw_store._selfcheck ok` then `ok`.
+Run: `cd plugin/hephastion/dashboard && python selftest.py`
+Expected: `hephastion_store._selfcheck ok` then `ok`.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add plugin/hermes-workspace docs/plans
+git add plugin/hephastion docs/plans
 git commit -m "Scaffold Knowledge backend: config, path guard, manifest"
 ```
 
 ---
 
-## Task 2: Note parser (`hw_notes.py`)
+## Task 2: Note parser (`hephastion_notes.py`)
 
 **Files:**
-- Create: `plugin/hermes-workspace/dashboard/hw_notes.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py` (add `hw_notes` to `MODULES`)
+- Create: `plugin/hephastion/dashboard/hephastion_notes.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py` (add `hephastion_notes` to `MODULES`)
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `hw_notes.parse_note(text: str, stem: str) -> dict` returning
+- Produces: `hephastion_notes.parse_note(text: str, stem: str) -> dict` returning
   `{ "title": str, "headings": str, "tags": str, "links": str, "frontmatter": str, "body": str }`
   (all values are newline- or space-joined strings ready for FTS columns).
-  `hw_notes.SECRET_KEY_RE` — compiled regex for frontmatter keys to skip.
+  `hephastion_notes.SECRET_KEY_RE` — compiled regex for frontmatter keys to skip.
 
-- [ ] **Step 1: Write the failing self-check in `hw_notes.py`**
+- [ ] **Step 1: Write the failing self-check in `hephastion_notes.py`**
 
 ```python
 """Pure Markdown note parsing for the FTS index. No I/O."""
@@ -480,39 +480,39 @@ def _selfcheck() -> None:
 
 - [ ] **Step 2: Run to verify it fails, then passes**
 
-Run: `python -c "import hw_notes; hw_notes._selfcheck(); print('ok')"`
+Run: `python -c "import hephastion_notes; hephastion_notes._selfcheck(); print('ok')"`
 Expected first: `AttributeError` / assertion while iterating. After Step 1 is complete: `ok`.
 
-- [ ] **Step 3: Add `"hw_notes"` to `MODULES` in `selftest.py`; run `python selftest.py`**
+- [ ] **Step 3: Add `"hephastion_notes"` to `MODULES` in `selftest.py`; run `python selftest.py`**
 
-Expected: `hw_notes._selfcheck ok`.
+Expected: `hephastion_notes._selfcheck ok`.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add plugin/hermes-workspace/dashboard/hw_notes.py plugin/hermes-workspace/dashboard/selftest.py
+git add plugin/hephastion/dashboard/hephastion_notes.py plugin/hephastion/dashboard/selftest.py
 git commit -m "Add note parser for the FTS index"
 ```
 
 ---
 
-## Task 3: FTS5 index — build and search (`hw_index.py`)
+## Task 3: FTS5 index — build and search (`hephastion_index.py`)
 
 **Files:**
-- Create: `plugin/hermes-workspace/dashboard/hw_index.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py`
+- Create: `plugin/hephastion/dashboard/hephastion_index.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py`
 
 **Interfaces:**
-- Consumes: `hw_notes.parse_note`, `hw_store.vault_path`, `hw_store.vault_hash`, `hw_store.data_dir`, `hw_store.get_config`.
+- Consumes: `hephastion_notes.parse_note`, `hephastion_store.vault_path`, `hephastion_store.vault_hash`, `hephastion_store.data_dir`, `hephastion_store.get_config`.
 - Produces:
-  - `hw_index.sanitize_fts_query(s: str) -> str`
-  - `hw_index.Index()` — singleton-ish; `get_index() -> Index`.
+  - `hephastion_index.sanitize_fts_query(s: str) -> str`
+  - `hephastion_index.Index()` — singleton-ish; `get_index() -> Index`.
   - `Index.search(query: str, limit: int) -> list[dict]` → `[{ "path", "title", "score", "excerpt" }]`.
   - `Index.status() -> dict` → `{ "note_count", "indexed_count", "indexing", "last_scan_ts" }`.
   - `Index.sync(full: bool = False) -> dict` → `{ "indexed", "removed", "took_ms" }`.
   - `Index.rebuild()` — drop + recreate (used on corruption).
 
-- [ ] **Step 1: Write `hw_index.py` (build + full search; incremental sync is Task 4)**
+- [ ] **Step 1: Write `hephastion_index.py` (build + full search; incremental sync is Task 4)**
 
 ```python
 """SQLite FTS5 index over the vault. The one search entry point."""
@@ -521,8 +521,8 @@ import re
 import sqlite3
 import time
 
-import hw_notes
-import hw_store
+import hephastion_notes
+import hephastion_store
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
@@ -558,7 +558,7 @@ def _sha1(b: bytes) -> str:
 
 class Index:
     def __init__(self) -> None:
-        self._db_path = hw_store.data_dir() / "index" / f"{hw_store.vault_hash()}.db"
+        self._db_path = hephastion_store.data_dir() / "index" / f"{hephastion_store.vault_hash()}.db"
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._con = sqlite3.connect(self._db_path, check_same_thread=False)
         self._con.executescript("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
@@ -571,7 +571,7 @@ class Index:
             self._con = sqlite3.connect(self._db_path, check_same_thread=False)
             self._con.executescript("PRAGMA journal_mode=WAL;")
             self._con.executescript(_SCHEMA)
-        vp = hw_store.vault_path()
+        vp = hephastion_store.vault_path()
         self._meta_set("vault_path", str(vp.resolve()) if vp else "")
         self._indexing = False
         self._last_scan_ns = 0
@@ -582,8 +582,8 @@ class Index:
         self._con.commit()
 
     def _walk(self):
-        vp = hw_store.vault_path()
-        max_bytes = hw_store.get_config()["max_file_kb"] * 1024
+        vp = hephastion_store.vault_path()
+        max_bytes = hephastion_store.get_config()["max_file_kb"] * 1024
         for root, dirs, files in os.walk(vp, followlinks=False):
             dirs[:] = [d for d in dirs if not d.startswith(".") and d not in _SKIP_DIRS]
             for fn in files:
@@ -603,7 +603,7 @@ class Index:
         raw = open(full, "rb").read(max_bytes + 1)[:max_bytes]
         text = raw.decode("utf-8", errors="replace")
         stem = os.path.splitext(os.path.basename(rel))[0]
-        parsed = hw_notes.parse_note(text, stem)
+        parsed = hephastion_notes.parse_note(text, stem)
         self._con.execute("DELETE FROM notes WHERE path=?", (rel,))
         self._con.execute(
             "INSERT INTO notes(path,title,headings,tags,links,frontmatter,body) "
@@ -617,7 +617,7 @@ class Index:
             (rel, st.st_mtime_ns, st.st_size, _sha1(raw), parsed["title"], int(time.time())))
 
     def sync(self, full: bool = False) -> dict:
-        vp = hw_store.vault_path()
+        vp = hephastion_store.vault_path()
         if not vp or not vp.is_dir():
             return {"indexed": 0, "removed": 0, "took_ms": 0, "error": "vault_not_found"}
         t0 = time.time()
@@ -655,7 +655,7 @@ class Index:
             self.sync()
 
     def search(self, query: str, limit: int) -> list[dict]:
-        vp = hw_store.vault_path()
+        vp = hephastion_store.vault_path()
         if not vp or not vp.is_dir():
             return []
         self._maybe_sync()
@@ -691,7 +691,7 @@ _INDEX: Index | None = None
 
 def get_index() -> "Index":
     global _INDEX
-    vh = hw_store.vault_hash()
+    vh = hephastion_store.vault_hash()
     if _INDEX is None or _INDEX._db_path.stem != vh:
         _INDEX = Index()
     return _INDEX
@@ -704,14 +704,14 @@ def reset_for_tests() -> None:
     _INDEX = None
 ```
 
-- [ ] **Step 2: Write the self-check (`_selfcheck` in `hw_index.py`)**
+- [ ] **Step 2: Write the self-check (`_selfcheck` in `hephastion_index.py`)**
 
 ```python
 def _selfcheck() -> None:
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         os.environ["HERMES_HOME"] = os.path.join(d, "home")
-        hw_store._cache = None
+        hephastion_store._cache = None
         vault = os.path.join(d, "vault")
         for sub in ("Areas", "People", ".obsidian"):
             os.makedirs(os.path.join(vault, sub))
@@ -723,7 +723,7 @@ def _selfcheck() -> None:
         open(os.path.join(vault, ".obsidian", "app.json"), "w").write("{}")
         open(os.path.join(vault, "latin1.md"), "wb").write(
             "# Café\n\nna\xefve bytes.".encode("latin-1"))
-        hw_store.set_vault(vault)
+        hephastion_store.set_vault(vault)
         reset_for_tests()
         idx = get_index()
         idx.sync(full=True)
@@ -743,15 +743,15 @@ def _selfcheck() -> None:
 
 - [ ] **Step 3: Run it**
 
-Run: `python -c "import hw_index; hw_index._selfcheck(); print('ok')"`
+Run: `python -c "import hephastion_index; hephastion_index._selfcheck(); print('ok')"`
 Expected: `ok`. (If FTS5 is unavailable in the local `sqlite3`, note it — Hermes ships a build with FTS5; document a `PRAGMA compile_options` check in the README troubleshooting.)
 
-- [ ] **Step 4: Add `"hw_index"` to `MODULES`; run `python selftest.py`**
+- [ ] **Step 4: Add `"hephastion_index"` to `MODULES`; run `python selftest.py`**
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugin/hermes-workspace/dashboard/hw_index.py plugin/hermes-workspace/dashboard/selftest.py
+git add plugin/hephastion/dashboard/hephastion_index.py plugin/hephastion/dashboard/selftest.py
 git commit -m "Add SQLite FTS5 index and search"
 ```
 
@@ -760,33 +760,33 @@ git commit -m "Add SQLite FTS5 index and search"
 ## Task 4: Incremental sync and robustness
 
 **Files:**
-- Modify: `plugin/hermes-workspace/dashboard/hw_index.py` (extend `_selfcheck`; `sync` already incremental — this task proves and hardens it)
+- Modify: `plugin/hephastion/dashboard/hephastion_index.py` (extend `_selfcheck`; `sync` already incremental — this task proves and hardens it)
 
 **Interfaces:**
 - Consumes / Produces: unchanged from Task 3.
 
-- [ ] **Step 1: Extend `_selfcheck` in `hw_index.py` with incremental cases**
+- [ ] **Step 1: Extend `_selfcheck` in `hephastion_index.py` with incremental cases**
 
 ```python
 def _selfcheck_incremental() -> None:
     import tempfile, time
     with tempfile.TemporaryDirectory() as d:
         os.environ["HERMES_HOME"] = os.path.join(d, "home")
-        hw_store._cache = None
+        hephastion_store._cache = None
         vault = os.path.join(d, "vault")
         os.makedirs(os.path.join(vault, "Topics"))
         a = os.path.join(vault, "Topics", "A.md")
         b = os.path.join(vault, "Topics", "B.md")
         open(a, "w", encoding="utf-8").write("# A\n\napple\n")
         open(b, "w", encoding="utf-8").write("# B\n\nbanana\n")
-        hw_store.set_vault(vault)
+        hephastion_store.set_vault(vault)
         reset_for_tests()
         idx = get_index()
         idx.sync(full=True)
 
         calls = []
-        real = hw_notes.parse_note
-        hw_notes.parse_note = lambda t, s: calls.append(s) or real(t, s)
+        real = hephastion_notes.parse_note
+        hephastion_notes.parse_note = lambda t, s: calls.append(s) or real(t, s)
         try:
             time.sleep(0.01)
             open(a, "w", encoding="utf-8").write("# A\n\napricot\n")
@@ -797,7 +797,7 @@ def _selfcheck_incremental() -> None:
             assert idx.search("apricot", 5)[0]["path"] == "Topics/A.md"
             assert not idx.search("apple", 5)
         finally:
-            hw_notes.parse_note = real
+            hephastion_notes.parse_note = real
 
         os.remove(b)
         idx._last_scan_ns = 0
@@ -812,16 +812,16 @@ def _selfcheck_incremental() -> None:
 
 - [ ] **Step 2: Wire it into `_selfcheck`**
 
-At the end of `hw_index._selfcheck()` add: `_selfcheck_incremental()`.
+At the end of `hephastion_index._selfcheck()` add: `_selfcheck_incremental()`.
 
 - [ ] **Step 3: Run `python selftest.py`**
 
-Expected: `hw_index._selfcheck ok`.
+Expected: `hephastion_index._selfcheck ok`.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add plugin/hermes-workspace/dashboard/hw_index.py
+git add plugin/hephastion/dashboard/hephastion_index.py
 git commit -m "Prove incremental reindex: single-file reparse, deletion, symlink skip"
 ```
 
@@ -830,18 +830,18 @@ git commit -m "Prove incremental reindex: single-file reparse, deletion, symlink
 ## Task 5: Read-side endpoints (`/search`, `/tree`, `/note`, `/resolve`, `/reindex`)
 
 **Files:**
-- Modify: `plugin/hermes-workspace/dashboard/plugin_api.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py` (start the HTTP round-trip section)
+- Modify: `plugin/hephastion/dashboard/plugin_api.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py` (start the HTTP round-trip section)
 
 **Interfaces:**
-- Consumes: `hw_index.get_index`, `hw_store.guard_path`, `hw_store.status`.
+- Consumes: `hephastion_index.get_index`, `hephastion_store.guard_path`, `hephastion_store.status`.
 - Produces the HTTP surface in the spec §8 for the read side. `/note` returns `{ path, abspath, markdown }`. `/tree` returns `{ dirs: [rel], files: [{ path, title, mtime }] }`. `/resolve` returns `{ path: str | None }`.
 
 - [ ] **Step 1: Add endpoints to `plugin_api.py`**
 
 ```python
 import os  # already imported
-import hw_index  # noqa: E402
+import hephastion_index  # noqa: E402
 
 
 class SearchBody(BaseModel):
@@ -851,21 +851,21 @@ class SearchBody(BaseModel):
 
 @router.post("/search")
 def search(body: SearchBody) -> dict:
-    vp = hw_store.vault_path()
+    vp = hephastion_store.vault_path()
     if not vp or not vp.is_dir():
         return {"results": [], "error": "vault_not_found"}
-    return {"results": hw_index.get_index().search(body.query, body.limit)}
+    return {"results": hephastion_index.get_index().search(body.query, body.limit)}
 
 
 @router.get("/tree")
 def tree(path: str = "") -> dict:
     try:
-        base = hw_store.guard_path(path)
-    except hw_store.PathError as e:
+        base = hephastion_store.guard_path(path)
+    except hephastion_store.PathError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not base.is_dir():
         raise HTTPException(status_code=404, detail="not a directory")
-    vp = hw_store.vault_path()
+    vp = hephastion_store.vault_path()
     dirs, files = [], []
     for entry in sorted(os.scandir(base), key=lambda e: e.name.lower()):
         if entry.name.startswith("."):
@@ -882,8 +882,8 @@ def tree(path: str = "") -> dict:
 @router.get("/note")
 def note(path: str) -> dict:
     try:
-        p = hw_store.guard_path(path)
-    except hw_store.PathError as e:
+        p = hephastion_store.guard_path(path)
+    except hephastion_store.PathError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not p.is_file():
         raise HTTPException(status_code=404, detail="not found")
@@ -894,7 +894,7 @@ def note(path: str) -> dict:
 @router.get("/resolve")
 def resolve(link: str) -> dict:
     target = link.strip().strip("[]").split("#")[0].split("|")[0].strip()
-    idx = hw_index.get_index()
+    idx = hephastion_index.get_index()
     hits = idx.search(f'"{target}"', 5)
     for h in hits:
         stem = os.path.splitext(os.path.basename(h["path"]))[0]
@@ -909,7 +909,7 @@ class ReindexBody(BaseModel):
 
 @router.post("/reindex")
 def reindex(body: ReindexBody) -> dict:
-    return hw_index.get_index().sync(full=body.full)
+    return hephastion_index.get_index().sync(full=body.full)
 ```
 
 - [ ] **Step 2: Add the HTTP round-trip helper to `selftest.py`**
@@ -928,13 +928,13 @@ def _selfcheck_http_read() -> None:
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         os.environ["HERMES_HOME"] = os.path.join(d, "home")
-        import hw_store, hw_index
-        hw_store._cache = None
+        import hephastion_store, hephastion_index
+        hephastion_store._cache = None
         vault = os.path.join(d, "vault")
         os.makedirs(os.path.join(vault, "Areas"))
         open(os.path.join(vault, "Areas", "Argos.md"), "w", encoding="utf-8").write(
             "# Argos\n\nwidget engine\n\n## History\n\n- **2026-08-20** — merged.\n")
-        hw_index.reset_for_tests()
+        hephastion_index.reset_for_tests()
         c = _client()
         assert c.post("/config", json={"vault": vault}).json()["vault_exists"]
         c.post("/reindex", json={"full": True})
@@ -955,28 +955,28 @@ Expected: the read round-trip asserts pass.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add plugin/hermes-workspace/dashboard/plugin_api.py plugin/hermes-workspace/dashboard/selftest.py
+git add plugin/hephastion/dashboard/plugin_api.py plugin/hephastion/dashboard/selftest.py
 git commit -m "Add read-side endpoints: search, tree, note, resolve, reindex"
 ```
 
 ---
 
-## Task 6: Context builder (`hw_context.py`) + `/context`
+## Task 6: Context builder (`hephastion_context.py`) + `/context`
 
 **Files:**
-- Create: `plugin/hermes-workspace/dashboard/hw_context.py`
-- Modify: `plugin/hermes-workspace/dashboard/plugin_api.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py`
+- Create: `plugin/hephastion/dashboard/hephastion_context.py`
+- Modify: `plugin/hephastion/dashboard/plugin_api.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py`
 
 **Interfaces:**
-- Consumes: `hw_index.get_index`.
+- Consumes: `hephastion_index.get_index`.
 - Produces:
-  - `hw_context.build_context(index, query: str, budget_tokens: int, k_max: int) -> dict`
+  - `hephastion_context.build_context(index, query: str, budget_tokens: int, k_max: int) -> dict`
     → `{ "notes": [{ "path", "excerpt", "tokens" }], "total_tokens": int, "block": str }`.
-  - `hw_context.VAULT_CONTEXT_OPEN` / `VAULT_CONTEXT_CLOSE` — the exact wrapper strings.
-  - `hw_context.strip_vault_context(text: str) -> str` — removes any injected block (used by Task 11).
+  - `hephastion_context.VAULT_CONTEXT_OPEN` / `VAULT_CONTEXT_CLOSE` — the exact wrapper strings.
+  - `hephastion_context.strip_vault_context(text: str) -> str` — removes any injected block (used by Task 11).
 
-- [ ] **Step 1: Write `hw_context.py`**
+- [ ] **Step 1: Write `hephastion_context.py`**
 
 ```python
 """Builds the <vault-context> block prepended to an outgoing message. Pure given an Index."""
@@ -1055,7 +1055,7 @@ def _selfcheck() -> None:
 - [ ] **Step 2: Add `/context` to `plugin_api.py`**
 
 ```python
-import hw_context  # noqa: E402
+import hephastion_context  # noqa: E402
 
 
 class ContextBody(BaseModel):
@@ -1066,37 +1066,37 @@ class ContextBody(BaseModel):
 
 @router.post("/context")
 def context(body: ContextBody) -> dict:
-    vp = hw_store.vault_path()
+    vp = hephastion_store.vault_path()
     if not vp or not vp.is_dir():
         return {"notes": [], "total_tokens": 0, "block": ""}
-    return hw_context.build_context(hw_index.get_index(), body.query,
+    return hephastion_context.build_context(hephastion_index.get_index(), body.query,
                                     body.budget_tokens, body.k_max)
 ```
 
-- [ ] **Step 3: Add `"hw_context"` to `MODULES`; run `python selftest.py`**
+- [ ] **Step 3: Add `"hephastion_context"` to `MODULES`; run `python selftest.py`**
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add plugin/hermes-workspace/dashboard/hw_context.py plugin/hermes-workspace/dashboard/plugin_api.py plugin/hermes-workspace/dashboard/selftest.py
+git add plugin/hephastion/dashboard/hephastion_context.py plugin/hephastion/dashboard/plugin_api.py plugin/hephastion/dashboard/selftest.py
 git commit -m "Add context block builder and /context endpoint"
 ```
 
 ---
 
-## Task 7: Target resolution (`hw_merge.py`, part 1)
+## Task 7: Target resolution (`hephastion_merge.py`, part 1)
 
 **Files:**
-- Create: `plugin/hermes-workspace/dashboard/hw_merge.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py`
+- Create: `plugin/hephastion/dashboard/hephastion_merge.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py`
 
 **Interfaces:**
-- Consumes: `hw_index.get_index`, `hw_store.vault_path`.
+- Consumes: `hephastion_index.get_index`, `hephastion_store.vault_path`.
 - Produces:
-  - `hw_merge.resolve_target(hint: str, index) -> dict` →
+  - `hephastion_merge.resolve_target(hint: str, index) -> dict` →
     `{ "target_path": str, "action": "append" | "create", "resolved_from": str, "fuzzy_candidate": str | None }`.
 
-- [ ] **Step 1: Write the resolver in `hw_merge.py`**
+- [ ] **Step 1: Write the resolver in `hephastion_merge.py`**
 
 ```python
 """Resolve a memory to a vault note, render the line, splice it in, write it safely."""
@@ -1162,19 +1162,19 @@ def _create_path(hint: str, stem: str) -> str:
 ```python
 def _selfcheck() -> None:
     import tempfile
-    import hw_store, hw_index
+    import hephastion_store, hephastion_index
     with tempfile.TemporaryDirectory() as d:
         os.environ["HERMES_HOME"] = os.path.join(d, "home")
-        hw_store._cache = None
+        hephastion_store._cache = None
         vault = os.path.join(d, "vault")
         for sub in ("Areas", "People", "Topics"):
             os.makedirs(os.path.join(vault, sub))
         open(os.path.join(vault, "Areas", "Argos.md"), "w", encoding="utf-8").write("# Argos\n")
         open(os.path.join(vault, "People", "Ada Lovelace.md"), "w", encoding="utf-8").write(
             "# Ada Lovelace\n")
-        hw_store.set_vault(vault)
-        hw_index.reset_for_tests()
-        idx = hw_index.get_index()
+        hephastion_store.set_vault(vault)
+        hephastion_index.reset_for_tests()
+        idx = hephastion_index.get_index()
         idx.sync(full=True)
 
         assert resolve_target("Areas/Argos.md", idx)["resolved_from"] == "exact"
@@ -1188,32 +1188,32 @@ def _selfcheck() -> None:
         assert resolve_target("../../etc/passwd", idx)["target_path"] == "Topics/passwd.md"
 ```
 
-- [ ] **Step 3: Add `"hw_merge"` to `MODULES`; run `python selftest.py`**
+- [ ] **Step 3: Add `"hephastion_merge"` to `MODULES`; run `python selftest.py`**
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add plugin/hermes-workspace/dashboard/hw_merge.py plugin/hermes-workspace/dashboard/selftest.py
+git add plugin/hephastion/dashboard/hephastion_merge.py plugin/hephastion/dashboard/selftest.py
 git commit -m "Add memory target resolution"
 ```
 
 ---
 
-## Task 8: Line rendering and history splicing (`hw_merge.py`, part 2)
+## Task 8: Line rendering and history splicing (`hephastion_merge.py`, part 2)
 
 **Files:**
-- Modify: `plugin/hermes-workspace/dashboard/hw_merge.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py`
+- Modify: `plugin/hephastion/dashboard/hephastion_merge.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py`
 
 **Interfaces:**
 - Produces:
-  - `hw_merge.render_line(history_line: str, supersedes: str | None, today: str) -> str`
-  - `hw_merge.insert_history_line(text: str, line: str) -> tuple[str, bool]` → `(new_text, section_created)`
-  - `hw_merge.insert_timeline_line(text: str, line: str) -> str`
-  - `hw_merge.new_note_body(stem: str, line: str) -> str`
-  - `hw_merge.DATE_RE` — `re.compile(r"^\d{4}-\d{2}-\d{2}$")`
+  - `hephastion_merge.render_line(history_line: str, supersedes: str | None, today: str) -> str`
+  - `hephastion_merge.insert_history_line(text: str, line: str) -> tuple[str, bool]` → `(new_text, section_created)`
+  - `hephastion_merge.insert_timeline_line(text: str, line: str) -> str`
+  - `hephastion_merge.new_note_body(stem: str, line: str) -> str`
+  - `hephastion_merge.DATE_RE` — `re.compile(r"^\d{4}-\d{2}-\d{2}$")`
 
-- [ ] **Step 1: Add rendering + splicing to `hw_merge.py`**
+- [ ] **Step 1: Add rendering + splicing to `hephastion_merge.py`**
 
 ```python
 import datetime
@@ -1346,36 +1346,36 @@ def _selfcheck_render() -> None:
         "# Foo\n\na fact.\n\n## History\n\n- **2026-08-30** — a fact.\n"
 ```
 
-Call `_selfcheck_render()` from `hw_merge._selfcheck()`.
+Call `_selfcheck_render()` from `hephastion_merge._selfcheck()`.
 
 - [ ] **Step 3: Run `python selftest.py`**
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add plugin/hermes-workspace/dashboard/hw_merge.py plugin/hermes-workspace/dashboard/selftest.py
+git add plugin/hephastion/dashboard/hephastion_merge.py plugin/hephastion/dashboard/selftest.py
 git commit -m "Add line rendering and History/Timeline splicing"
 ```
 
 ---
 
-## Task 9: Atomic write, backup, journal, undo (`hw_merge.py`, part 3)
+## Task 9: Atomic write, backup, journal, undo (`hephastion_merge.py`, part 3)
 
 **Files:**
-- Modify: `plugin/hermes-workspace/dashboard/hw_merge.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py`
+- Modify: `plugin/hephastion/dashboard/hephastion_merge.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py`
 
 **Interfaces:**
-- Consumes: `hw_store.vault_path`, `hw_store.data_dir`, `hw_store.vault_hash`.
+- Consumes: `hephastion_store.vault_path`, `hephastion_store.data_dir`, `hephastion_store.vault_hash`.
 - Produces:
-  - `hw_merge.sha256(b: bytes) -> str`
-  - `hw_merge.atomic_write(abspath: str, new_text: str, pre_sha: str | None) -> dict` → `{ "status": "written"|"conflict"|"error", "detail": str, "sha_after": str | None }`
-  - `hw_merge.backup(abspath: str) -> None`
-  - `hw_merge.journal_append(batch_id: str, items: list[dict]) -> None` (items: `{ path, sha_before, sha_after, line, source_session_id, candidate_index }`)
-  - `hw_merge.undo(batch_id: str | None) -> list[dict]`
-  - `hw_merge.journal_seen(session_id: str, candidate_index: int) -> bool`
+  - `hephastion_merge.sha256(b: bytes) -> str`
+  - `hephastion_merge.atomic_write(abspath: str, new_text: str, pre_sha: str | None) -> dict` → `{ "status": "written"|"conflict"|"error", "detail": str, "sha_after": str | None }`
+  - `hephastion_merge.backup(abspath: str) -> None`
+  - `hephastion_merge.journal_append(batch_id: str, items: list[dict]) -> None` (items: `{ path, sha_before, sha_after, line, source_session_id, candidate_index }`)
+  - `hephastion_merge.undo(batch_id: str | None) -> list[dict]`
+  - `hephastion_merge.journal_seen(session_id: str, candidate_index: int) -> bool`
 
-- [ ] **Step 1: Add to `hw_merge.py`**
+- [ ] **Step 1: Add to `hephastion_merge.py`**
 
 ```python
 import hashlib
@@ -1383,7 +1383,7 @@ import json
 import shutil
 import time
 
-import hw_store
+import hephastion_store
 
 
 def sha256(b: bytes) -> str:
@@ -1391,7 +1391,7 @@ def sha256(b: bytes) -> str:
 
 
 def _journal_path():
-    vp = hw_store.vault_path()
+    vp = hephastion_store.vault_path()
     d = vp / ".hermes"
     d.mkdir(exist_ok=True)
     return d / "journal.json"
@@ -1410,7 +1410,7 @@ def _read_journal() -> list[dict]:
 def journal_append(batch_id: str, items: list[dict]) -> None:
     log = _read_journal()
     log.append({"ts": time.time(), "batch_id": batch_id,
-                "vault": str(hw_store.vault_path()), "items": items})
+                "vault": str(hephastion_store.vault_path()), "items": items})
     log = log[-500:]
     p = _journal_path()
     tmp = p.with_suffix(".json.tmp")
@@ -1428,11 +1428,11 @@ def journal_seen(session_id: str, candidate_index: int) -> bool:
 
 
 def _backup_dir():
-    return hw_store.data_dir() / "backups" / hw_store.vault_hash()
+    return hephastion_store.data_dir() / "backups" / hephastion_store.vault_hash()
 
 
 def backup(abspath: str) -> None:
-    vp = hw_store.vault_path()
+    vp = hephastion_store.vault_path()
     rel = os.path.relpath(abspath, vp).replace(os.sep, "/")
     dest_dir = _backup_dir() / os.path.dirname(rel)
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -1500,7 +1500,7 @@ def undo(batch_id: str | None) -> list[dict]:
         (b for b in reversed(log) if b["batch_id"] == batch_id), None)
     if batch is None:
         return []
-    vp = hw_store.vault_path()
+    vp = hephastion_store.vault_path()
     seen_first: set[str] = set()
     results = []
     for it in batch["items"]:
@@ -1536,19 +1536,19 @@ def undo(batch_id: str | None) -> list[dict]:
 ```python
 def _selfcheck_write() -> None:
     import tempfile
-    import hw_store
+    import hephastion_store
     with tempfile.TemporaryDirectory() as d:
         os.environ["HERMES_HOME"] = os.path.join(d, "home")
-        hw_store._cache = None
+        hephastion_store._cache = None
         vault = os.path.join(d, "vault")
         os.makedirs(os.path.join(vault, "Areas"))
-        hw_store.set_vault(vault)
+        hephastion_store.set_vault(vault)
         p = os.path.join(vault, "Areas", "X.md")
         open(p, "w", encoding="utf-8").write("# X\r\n\r\n## History\r\n\r\n- **2026-08-01** — a.\r\n")
         pre = sha256(open(p, "rb").read())
 
         backup(p)
-        assert list((hw_store.data_dir() / "backups" / hw_store.vault_hash() / "Areas").glob("*.bak"))
+        assert list((hephastion_store.data_dir() / "backups" / hephastion_store.vault_hash() / "Areas").glob("*.bak"))
 
         new_text = open(p, encoding="utf-8").read().replace(
             "- **2026-08-01** — a.\r\n", "- **2026-08-01** — a.\r\n- **2026-08-30** — b.\r\n")
@@ -1572,33 +1572,33 @@ def _selfcheck_write() -> None:
         assert "- **2026-08-30** — b." not in open(p, encoding="utf-8").read()
 ```
 
-Call `_selfcheck_write()` from `hw_merge._selfcheck()`.
+Call `_selfcheck_write()` from `hephastion_merge._selfcheck()`.
 
 - [ ] **Step 3: Run `python selftest.py`**
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add plugin/hermes-workspace/dashboard/hw_merge.py plugin/hermes-workspace/dashboard/selftest.py
+git add plugin/hephastion/dashboard/hephastion_merge.py plugin/hephastion/dashboard/selftest.py
 git commit -m "Add atomic write, backup, journal, and undo"
 ```
 
 ---
 
-## Task 10: Dedup (`hw_merge.py`, part 4)
+## Task 10: Dedup (`hephastion_merge.py`, part 4)
 
 **Files:**
-- Modify: `plugin/hermes-workspace/dashboard/hw_merge.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py`
+- Modify: `plugin/hephastion/dashboard/hephastion_merge.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py`
 
 **Interfaces:**
-- Consumes: `journal_seen`, `hw_index.get_index`.
+- Consumes: `journal_seen`, `hephastion_index.get_index`.
 - Produces:
-  - `hw_merge.dedup_entry(line: str, target_text: str, session_id: str, candidate_index: int, index, is_timeline: bool) -> dict`
+  - `hephastion_merge.dedup_entry(line: str, target_text: str, session_id: str, candidate_index: int, index, is_timeline: bool) -> dict`
     → `{ "duplicate": bool, "reason": str, "colliding_line": str | None, "warning": str | None }`
     (`reason` ∈ `"already_written" | "near_dup" | "new"`).
 
-- [ ] **Step 1: Add `dedup_entry` to `hw_merge.py`**
+- [ ] **Step 1: Add `dedup_entry` to `hephastion_merge.py`**
 
 ```python
 def _line_prose(line: str) -> str:
@@ -1637,16 +1637,16 @@ def dedup_entry(line, target_text, session_id, candidate_index, index, is_timeli
 ```python
 def _selfcheck_dedup() -> None:
     import tempfile
-    import hw_store, hw_index
+    import hephastion_store, hephastion_index
     with tempfile.TemporaryDirectory() as d:
         os.environ["HERMES_HOME"] = os.path.join(d, "home")
-        hw_store._cache = None
+        hephastion_store._cache = None
         vault = os.path.join(d, "vault")
         os.makedirs(os.path.join(vault, "Areas"))
         open(os.path.join(vault, "Areas", "X.md"), "w", encoding="utf-8").write("# X\nprose\n")
-        hw_store.set_vault(vault)
-        hw_index.reset_for_tests()
-        idx = hw_index.get_index()
+        hephastion_store.set_vault(vault)
+        hephastion_index.reset_for_tests()
+        idx = hephastion_index.get_index()
         idx.sync(full=True)
 
         target = "## History\n\n- **2026-08-01** — the user prefers tabs over spaces.\n"
@@ -1662,35 +1662,35 @@ def _selfcheck_dedup() -> None:
         assert r["duplicate"] and r["reason"] == "already_written"
 ```
 
-Call `_selfcheck_dedup()` from `hw_merge._selfcheck()`.
+Call `_selfcheck_dedup()` from `hephastion_merge._selfcheck()`.
 
 - [ ] **Step 3: Run `python selftest.py`**
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add plugin/hermes-workspace/dashboard/hw_merge.py plugin/hermes-workspace/dashboard/selftest.py
+git add plugin/hephastion/dashboard/hephastion_merge.py plugin/hephastion/dashboard/selftest.py
 git commit -m "Add content-based dedup"
 ```
 
 ---
 
-## Task 11: Extraction — prompt, transcript, parse, validate (`hw_extract.py`)
+## Task 11: Extraction — prompt, transcript, parse, validate (`hephastion_extract.py`)
 
 **Files:**
-- Create: `plugin/hermes-workspace/dashboard/hw_extract.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py`
+- Create: `plugin/hephastion/dashboard/hephastion_extract.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py`
 
 **Interfaces:**
-- Consumes: `hw_context.strip_vault_context`.
+- Consumes: `hephastion_context.strip_vault_context`.
 - Produces:
-  - `hw_extract.build_prompt(existing_history: str = "") -> str`
-  - `hw_extract.render_transcript(messages: list[dict]) -> str`
-  - `hw_extract.parse_model_output(raw: str) -> dict` → `{ "candidates": list[dict], "rejected": list[dict], "error": str | None, "raw_excerpt": str | None }`
-  - `hw_extract.validate_candidate(c: dict) -> dict | None` → `{ "target", "history_line", "supersedes" }` or `None`
-  - `hw_extract.PROVIDER_DENY_RE`, `hw_extract.SECRET_RE`
+  - `hephastion_extract.build_prompt(existing_history: str = "") -> str`
+  - `hephastion_extract.render_transcript(messages: list[dict]) -> str`
+  - `hephastion_extract.parse_model_output(raw: str) -> dict` → `{ "candidates": list[dict], "rejected": list[dict], "error": str | None, "raw_excerpt": str | None }`
+  - `hephastion_extract.validate_candidate(c: dict) -> dict | None` → `{ "target", "history_line", "supersedes" }` or `None`
+  - `hephastion_extract.PROVIDER_DENY_RE`, `hephastion_extract.SECRET_RE`
 
-- [ ] **Step 1: Write `hw_extract.py`**
+- [ ] **Step 1: Write `hephastion_extract.py`**
 
 ```python
 """Turn a chat transcript into reviewable memory candidates."""
@@ -1698,7 +1698,7 @@ import json
 import re
 import unicodedata
 
-import hw_context
+import hephastion_context
 
 PROVIDER_DENY_RE = re.compile(
     r"\b(claude|anthropic|gpt|openai|gemini|grok|xai|llama|mistral|ollama|copilot)\b", re.I)
@@ -1754,7 +1754,7 @@ def render_transcript(messages: list[dict]) -> str:
         role = m.get("role")
         if role not in ("user", "assistant"):
             continue
-        text = hw_context.strip_vault_context(m.get("text") or m.get("content") or "")
+        text = hephastion_context.strip_vault_context(m.get("text") or m.get("content") or "")
         if text.strip():
             out.append(f"{role.upper()}: {text.strip()}")
     joined = "\n\n".join(out)
@@ -1822,8 +1822,8 @@ def validate_candidate(c: dict) -> dict | None:
 ```python
 def _selfcheck() -> None:
     msgs = [
-        {"role": "user", "text": hw_context.VAULT_CONTEXT_OPEN + "\nnote stuff\n"
-         + hw_context.VAULT_CONTEXT_CLOSE + "\nI switched my editor to Helix."},
+        {"role": "user", "text": hephastion_context.VAULT_CONTEXT_OPEN + "\nnote stuff\n"
+         + hephastion_context.VAULT_CONTEXT_CLOSE + "\nI switched my editor to Helix."},
         {"role": "assistant", "text": "Noted."},
         {"role": "tool", "text": "should be dropped"},
     ]
@@ -1848,12 +1848,12 @@ def _selfcheck() -> None:
     assert v and v["history_line"].endswith(".")
 ```
 
-- [ ] **Step 3: Add `"hw_extract"` to `MODULES`; run `python selftest.py`**
+- [ ] **Step 3: Add `"hephastion_extract"` to `MODULES`; run `python selftest.py`**
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add plugin/hermes-workspace/dashboard/hw_extract.py plugin/hermes-workspace/dashboard/selftest.py
+git add plugin/hephastion/dashboard/hephastion_extract.py plugin/hephastion/dashboard/selftest.py
 git commit -m "Add memory extraction: prompt, transcript, parse, validate"
 ```
 
@@ -1862,11 +1862,11 @@ git commit -m "Add memory extraction: prompt, transcript, parse, validate"
 ## Task 12: Write-side endpoints + full round-trip
 
 **Files:**
-- Modify: `plugin/hermes-workspace/dashboard/plugin_api.py`
-- Modify: `plugin/hermes-workspace/dashboard/selftest.py`
+- Modify: `plugin/hephastion/dashboard/plugin_api.py`
+- Modify: `plugin/hephastion/dashboard/selftest.py`
 
 **Interfaces:**
-- Consumes: `hw_extract.*`, `hw_merge.*`, `hw_index.get_index`, `hw_context.strip_vault_context`.
+- Consumes: `hephastion_extract.*`, `hephastion_merge.*`, `hephastion_index.get_index`, `hephastion_context.strip_vault_context`.
 - Produces the spec §8 write surface: `/extract/prepare`, `/extract/parse`, `/extract/resolve`, `/memories/preview`, `/memories/commit`, `/memories/undo`, `/memories/history`.
 
 - [ ] **Step 1: Add endpoints to `plugin_api.py`**
@@ -1876,9 +1876,9 @@ import datetime  # noqa: E402
 import difflib  # noqa: E402
 import uuid  # noqa: E402
 
-import hw_context  # noqa: E402  (already imported in Task 6)
-import hw_extract  # noqa: E402
-import hw_merge  # noqa: E402
+import hephastion_context  # noqa: E402  (already imported in Task 6)
+import hephastion_extract  # noqa: E402
+import hephastion_merge  # noqa: E402
 
 
 class PrepareBody(BaseModel):
@@ -1887,8 +1887,8 @@ class PrepareBody(BaseModel):
 
 @router.post("/extract/prepare")
 def extract_prepare(body: PrepareBody) -> dict:
-    transcript = hw_extract.render_transcript(body.messages)
-    return {"transcript_text": transcript, "prompt": hw_extract.build_prompt()}
+    transcript = hephastion_extract.render_transcript(body.messages)
+    return {"transcript_text": transcript, "prompt": hephastion_extract.build_prompt()}
 
 
 class ParseBody(BaseModel):
@@ -1897,7 +1897,7 @@ class ParseBody(BaseModel):
 
 @router.post("/extract/parse")
 def extract_parse(body: ParseBody) -> dict:
-    return hw_extract.parse_model_output(body.raw)
+    return hephastion_extract.parse_model_output(body.raw)
 
 
 class ResolveBody(BaseModel):
@@ -1907,17 +1907,17 @@ class ResolveBody(BaseModel):
 
 @router.post("/extract/resolve")
 def extract_resolve(body: ResolveBody) -> dict:
-    idx = hw_index.get_index()
-    vp = hw_store.vault_path()
+    idx = hephastion_index.get_index()
+    vp = hephastion_store.vault_path()
     today = datetime.date.today().isoformat()
     out = []
     for i, c in enumerate(body.candidates):
-        r = hw_merge.resolve_target(c["target"], idx)
-        line = hw_merge.render_line(c["history_line"], c.get("supersedes"), today)
+        r = hephastion_merge.resolve_target(c["target"], idx)
+        line = hephastion_merge.render_line(c["history_line"], c.get("supersedes"), today)
         tpath = vp / r["target_path"]
         text = tpath.read_text("utf-8", errors="replace") if tpath.is_file() else ""
         is_tl = r["target_path"].startswith("Timeline/")
-        dd = hw_merge.dedup_entry(line, text, body.source_session_id, i, idx, is_tl)
+        dd = hephastion_merge.dedup_entry(line, text, body.source_session_id, i, idx, is_tl)
         out.append({**c, "candidate_index": i, "target_path": r["target_path"],
                     "action": r["action"], "resolved_from": r["resolved_from"],
                     "fuzzy_candidate": r["fuzzy_candidate"], "rendered_line": line,
@@ -1940,20 +1940,20 @@ class PreviewBody(BaseModel):
 
 
 def _plan(item: MemItem):
-    vp = hw_store.vault_path()
+    vp = hephastion_store.vault_path()
     today = datetime.date.today().isoformat()
-    line = hw_merge.render_line(item.history_line, item.supersedes, today)
+    line = hephastion_merge.render_line(item.history_line, item.supersedes, today)
     abspath = vp / item.target_path
     stem = os.path.splitext(os.path.basename(item.target_path))[0]
     is_tl = item.target_path.startswith("Timeline/")
     if abspath.is_file():
         before = abspath.read_text("utf-8", errors="replace")
-        after = (hw_merge.insert_timeline_line(before, line) if is_tl
-                 else hw_merge.insert_history_line(before, line)[0])
+        after = (hephastion_merge.insert_timeline_line(before, line) if is_tl
+                 else hephastion_merge.insert_history_line(before, line)[0])
         action, created = "append", False
     else:
         before = ""
-        after = hw_merge.new_note_body(stem, line)
+        after = hephastion_merge.new_note_body(stem, line)
         action, created = "create", True
     return line, str(abspath), before, after, action, created
 
@@ -1966,7 +1966,7 @@ def memories_preview(body: PreviewBody) -> list[dict]:
         diff = "".join(difflib.unified_diff(
             before.splitlines(keepends=True), after.splitlines(keepends=True),
             item.target_path, item.target_path, n=3))
-        pre_sha = hw_merge.sha256(before.encode("utf-8")) if os.path.isfile(abspath) else None
+        pre_sha = hephastion_merge.sha256(before.encode("utf-8")) if os.path.isfile(abspath) else None
         res.append({"target_path": item.target_path, "action": action,
                     "section_created": created, "diff": diff, "pre_sha": pre_sha,
                     "warnings": [], "resolved_from": ""})
@@ -1982,12 +1982,12 @@ def memories_commit(body: PreviewBody) -> list[dict]:
         line, abspath, before, after, action, _ = _plan(item)
         if os.path.isfile(abspath):
             if abspath not in first_seen:
-                hw_merge.backup(abspath)
+                hephastion_merge.backup(abspath)
                 first_seen.add(abspath)
         else:
             os.makedirs(os.path.dirname(abspath), exist_ok=True)
-        sha_before = hw_merge.sha256(before.encode("utf-8")) if os.path.isfile(abspath) else None
-        w = hw_merge.atomic_write(abspath, after, item.pre_sha or sha_before)
+        sha_before = hephastion_merge.sha256(before.encode("utf-8")) if os.path.isfile(abspath) else None
+        w = hephastion_merge.atomic_write(abspath, after, item.pre_sha or sha_before)
         results.append({"target_path": item.target_path, "status": w["status"],
                         "detail": w["detail"]})
         if w["status"] == "written":
@@ -1997,8 +1997,8 @@ def memories_commit(body: PreviewBody) -> list[dict]:
                                   "source_session_id": body.source_session_id,
                                   "candidate_index": item.candidate_index})
     if journal_items:
-        hw_merge.journal_append(batch_id, journal_items)
-        idx = hw_index.get_index()
+        hephastion_merge.journal_append(batch_id, journal_items)
+        idx = hephastion_index.get_index()
         idx._last_scan_ns = 0
         idx.sync()
     return [{**r, "batch_id": batch_id} for r in results]
@@ -2010,8 +2010,8 @@ class UndoBody(BaseModel):
 
 @router.post("/memories/undo")
 def memories_undo(body: UndoBody) -> list[dict]:
-    out = hw_merge.undo(body.batch_id)
-    idx = hw_index.get_index()
+    out = hephastion_merge.undo(body.batch_id)
+    idx = hephastion_index.get_index()
     idx._last_scan_ns = 0
     idx.sync()
     return out
@@ -2021,7 +2021,7 @@ def memories_undo(body: UndoBody) -> list[dict]:
 def memories_history() -> list[dict]:
     return [{"batch_id": b["batch_id"], "ts": b["ts"],
              "notes": sorted({it["path"] for it in b["items"]}),
-             "counts": len(b["items"])} for b in reversed(hw_merge._read_journal())]
+             "counts": len(b["items"])} for b in reversed(hephastion_merge._read_journal())]
 ```
 
 - [ ] **Step 2: Add the highest-value round-trip test to `selftest.py`**
@@ -2031,15 +2031,15 @@ def _selfcheck_http_write() -> None:
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         os.environ["HERMES_HOME"] = os.path.join(d, "home")
-        import hw_store, hw_index
-        hw_store._cache = None
+        import hephastion_store, hephastion_index
+        hephastion_store._cache = None
         vault = os.path.join(d, "vault")
         os.makedirs(os.path.join(vault, "Areas"))
         argos = os.path.join(vault, "Areas", "Argos.md")
         open(argos, "w", encoding="utf-8").write(
             "# Argos\n\nwidget engine\n\n## History\n\n- **2026-08-20** — merged.\n")
         original = open(argos, "rb").read()
-        hw_index.reset_for_tests()
+        hephastion_index.reset_for_tests()
         c = _client()
         c.post("/config", json={"vault": vault})
         c.post("/reindex", json={"full": True})
@@ -2077,7 +2077,7 @@ Expected: every module `_selfcheck ok`, the read round-trip, and the write round
 - [ ] **Step 4: Commit**
 
 ```bash
-git add plugin/hermes-workspace/dashboard/plugin_api.py plugin/hermes-workspace/dashboard/selftest.py
+git add plugin/hephastion/dashboard/plugin_api.py plugin/hephastion/dashboard/selftest.py
 git commit -m "Add write-side endpoints and full reversible round-trip test"
 ```
 
@@ -2086,7 +2086,7 @@ git commit -m "Add write-side endpoints and full reversible round-trip test"
 ## Task 13: Renderer — Knowledge pane (search / browse / reader)
 
 **Files:**
-- Create: `plugin/hermes-workspace/desktop/plugin.js`
+- Create: `plugin/hephastion/desktop/plugin.js`
 
 **Interfaces:**
 - Consumes: the backend HTTP surface via `ctx.rest`.
@@ -2105,7 +2105,7 @@ import { jsx, jsxs, Fragment } from 'react/jsx-runtime'
 
 const { useState, useEffect, useCallback } = ui.react ?? require('react')
 
-const PLUGIN_ID = 'hermes-workspace'
+const PLUGIN_ID = 'hephastion'
 let CTX = null
 const api = (path, opts) => CTX.rest(path, opts)
 
@@ -2243,7 +2243,7 @@ export default {
 - [ ] **Step 2: Manual verification checklist (record results in the commit body)**
 
 ```
-[ ] Copy plugin/hermes-workspace to ~/.hermes/plugins/ ; add `hermes-workspace`
+[ ] Copy plugin/hephastion to ~/.hermes/plugins/ ; add `hephastion`
     to plugins.enabled in ~/.hermes/config.yaml ; restart Hermes Desktop.
 [ ] Settings → Plugins shows "Knowledge", enabled.
 [ ] Open the Knowledge pane. Header shows a red dot + "No vault".
@@ -2258,7 +2258,7 @@ export default {
 - [ ] **Step 3: Commit**
 
 ```bash
-git add plugin/hermes-workspace/desktop/plugin.js
+git add plugin/hephastion/desktop/plugin.js
 git commit -m "Add Knowledge pane: search, browse, reader"
 ```
 
@@ -2267,7 +2267,7 @@ git commit -m "Add Knowledge pane: search, browse, reader"
 ## Task 14: Renderer — composer toggle, middleware, preview strip
 
 **Files:**
-- Modify: `plugin/hermes-workspace/desktop/plugin.js`
+- Modify: `plugin/hephastion/desktop/plugin.js`
 
 **Interfaces:**
 - Consumes: `COMPOSER_AREAS`, `ctx.storage`, `POST /context`.
@@ -2394,7 +2394,7 @@ function InjectionView() {
 - [ ] **Step 6: Commit**
 
 ```bash
-git add plugin/hermes-workspace/desktop/plugin.js
+git add plugin/hephastion/desktop/plugin.js
 git commit -m "Add vault-context composer toggle, middleware, and preview strip"
 ```
 
@@ -2403,7 +2403,7 @@ git commit -m "Add vault-context composer toggle, middleware, and preview strip"
 ## Task 15: Renderer — extraction command and approval pane
 
 **Files:**
-- Modify: `plugin/hermes-workspace/desktop/plugin.js`
+- Modify: `plugin/hephastion/desktop/plugin.js`
 
 **Interfaces:**
 - Consumes: `host.request('session.history')`, `host.request('llm.oneshot')`, `host.state.model`, `host.state.focusedSessionId` / `focusedStoredSessionId`, `POST /extract/*`, `POST /memories/*`.
@@ -2581,7 +2581,7 @@ ctx.register({ id: 'cmd-reindex', area: PALETTE_AREA,
 - [ ] **Step 6: Commit**
 
 ```bash
-git add plugin/hermes-workspace/desktop/plugin.js
+git add plugin/hephastion/desktop/plugin.js
 git commit -m "Add memory extraction command and approval pane"
 ```
 
@@ -2601,7 +2601,7 @@ git commit -m "Add memory extraction command and approval pane"
 ```
 __pycache__/
 *.pyc
-plugin/hermes-workspace/dashboard/data/
+plugin/hephastion/dashboard/data/
 .DS_Store
 ```
 
@@ -2610,7 +2610,7 @@ plugin/hermes-workspace/dashboard/data/
 - [ ] **Step 3: Write `README.md`**
 
 ````markdown
-# Hermes Workspace
+# Hephastion
 
 Your Obsidian vault as long-term memory for Hermes Desktop. No AI provider owns
 your memory — the vault does. Works the same whichever model you have active.
@@ -2631,20 +2631,20 @@ v1 ships the **Knowledge** module:
 
 ## Install
 
-1. Copy `plugin/hermes-workspace/` into `~/.hermes/plugins/`
+1. Copy `plugin/hephastion/` into `~/.hermes/plugins/`
    (`%LOCALAPPDATA%\hermes\plugins\` on Windows).
 2. Add the plugin to the backend allow-list in `~/.hermes/config.yaml`:
    ```yaml
    plugins:
      enabled:
-       - hermes-workspace
+       - hephastion
    ```
 3. Restart Hermes Desktop.
 4. Open the **Knowledge** pane (sidebar, or `Ctrl/Cmd+Shift+K`) and set your
    vault folder in the plugin settings.
 5. Optional: drop an `agent_rules.md` in your vault (or point `rules_file` at
    one) to override the default capture conventions. See
-   `plugin/hermes-workspace/dashboard/default_rules.md` for the defaults.
+   `plugin/hephastion/dashboard/default_rules.md` for the defaults.
 
 ## How memories are written
 
@@ -2674,7 +2674,7 @@ Every write shows a diff first. A `.bak` of each touched note is kept, and
 ## Development
 
 ```bash
-cd plugin/hermes-workspace/dashboard
+cd plugin/hephastion/dashboard
 python selftest.py          # full backend suite, framework-free
 python selftest.py --big    # adds a 10k-note synthetic vault
 ```

@@ -1,4 +1,4 @@
-# Hermes Workspace — Knowledge module (v1 design)
+# Hephastion — Knowledge module (v1 design)
 
 Status: draft for review
 Last updated: 2026-08-30
@@ -18,7 +18,7 @@ v1 ships **one module — Knowledge** — with two paths:
   a finished chat; the user approves each in a pane; approved memories are
   appended to the vault following the vault's own capture conventions.
 
-Connections, Extensions, and Creator (from the broader Hermes Workspace idea) are
+Connections, Extensions, and Creator (from the broader Hephastion idea) are
 out of scope here and get their own designs later.
 
 ## 2. Constraints that shaped this design
@@ -30,7 +30,7 @@ out of scope here and get their own designs later.
   Hot-reloaded from disk.
 - The renderer half has no filesystem access. All vault I/O runs in a Python
   backend (`dashboard/plugin_api.py`, a FastAPI `APIRouter`) mounted at
-  `/api/plugins/hermes-workspace/`, reached from the UI via `ctx.rest(...)`.
+  `/api/plugins/hephastion/`, reached from the UI via `ctx.rest(...)`.
 - `host.request(method, params)` is the gateway JSON-RPC door (renderer-side
   only). Confirmed methods this design uses:
   - `session.history` `{ session_id }` → `{ count, messages: [{ role, text,
@@ -94,12 +94,12 @@ messages, or the notes the plugin writes.
 ## 3. Architecture
 
 ```
-~/.hermes/plugins/hermes-workspace/
+~/.hermes/plugins/hephastion/
 ├── plugin.yaml            # agent-side manifest (present but minimal in v1)
 ├── desktop/
 │   └── plugin.js          # renderer: panes, composer contributions, palette, approval flow
 └── dashboard/
-    ├── manifest.json      # { "name": "hermes-workspace", "api": "plugin_api.py", ... }
+    ├── manifest.json      # { "name": "hephastion", "api": "plugin_api.py", ... }
     └── plugin_api.py      # FastAPI APIRouter — all vault I/O, FTS index, merge engine
 ```
 
@@ -111,7 +111,7 @@ source of truth for the vault path and tunables. `ctx.storage` holds only
 ephemeral UI state (toggle position, last query, session excludes, last
 injection).
 
-Plugin data directory: `~/.hermes/plugins/hermes-workspace/data/`
+Plugin data directory: `~/.hermes/plugins/hephastion/data/`
 holds `config.json`, `index/<vault-hash>.db` (FTS), and per-note `.bak` files.
 The dedup/undo **journal lives inside the vault** at `<vault>/.hermes/journal.json`
 so Obsidian Sync carries it between devices. The FTS `.db` stays outside the
@@ -539,7 +539,7 @@ links + one "Undo this batch" button.
 
 ## 8. Backend API (`plugin_api.py`)
 
-FastAPI `router = APIRouter()`, mounted `/api/plugins/hermes-workspace/`. Path
+FastAPI `router = APIRouter()`, mounted `/api/plugins/hephastion/`. Path
 arguments are guarded on every endpoint:
 `(vault / p).resolve().is_relative_to(vault.resolve())` else HTTP 400, plus a
 symlink refusal.
@@ -689,8 +689,8 @@ body may now be stale), the Connections / Extensions / Creator modules.
 
 ## 12. Install (for the README, summarised)
 
-1. Copy `hermes-workspace/` to `~/.hermes/plugins/`.
-2. Add `hermes-workspace` to `plugins.enabled` in `~/.hermes/config.yaml`.
+1. Copy `hephastion/` to `~/.hermes/plugins/`.
+2. Add `hephastion` to `plugins.enabled` in `~/.hermes/config.yaml`.
 3. Restart Hermes Desktop (or rescan).
 4. Open the Knowledge pane, set the vault folder in plugin settings.
 5. Optional: drop an `agent_rules.md` (or point `rules_file` at one) in the

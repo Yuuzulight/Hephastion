@@ -21,7 +21,7 @@
     "three": "0.185.1",
     "@react-three/fiber": "9.7.0",
     "papaparse": "5.7.0",
-    "xlsx": "0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "mathjs": "15.2.0",
     "tone": "15.1.22",
     "@tanstack/react-table": "9.2.4",
